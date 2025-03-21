@@ -1,13 +1,27 @@
 import express from 'express';
-import { schedulePickup, assignPickup, updatePickupStatus, listPickups, optimizeRoute } from '../controllers/pickupController.js';
-import { protect } from '../middleware/authMiddleware.js';
+import {
+  schedulePickup,
+  assignPickup,
+  updatePickupStatus,
+  listPickups,
+  optimizeRoute,
+} from '../controllers/pickupController.js';
+import { protectUser, protectDriver } from '../middleware/authMiddleware.js'; 
+import multer from 'multer';
+const upload = multer({ dest: 'uploads/' });
+
+
 
 const router = express.Router();
 
-router.post('/schedule', schedulePickup);
-router.post('/assign', protect, assignPickup);
-router.post('/update-status', protect, updatePickupStatus);
-router.post('/optimize-route', protect, optimizeRoute); // Added route for optimization
-router.get('/', protect, listPickups);
+// Protected routes
+
+router.post('/add', protectUser, upload.single('itemImage'), schedulePickup);
+router.post('/assign', protectDriver, assignPickup);
+router.post('/update-status', protectDriver, updatePickupStatus);
+router.get('/me', protectDriver, listPickups);
+router.post('/optimize-route', protectDriver, optimizeRoute);
+
+router.get('/', protectDriver, listPickups);
 
 export default router;
