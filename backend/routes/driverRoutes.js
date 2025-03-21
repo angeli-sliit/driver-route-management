@@ -8,7 +8,7 @@ import {
   deleteDriver,
   updateDriverLocation,
   uploadProfilePicture,
-  getCurrentDriver // Add this import
+  getCurrentDriver 
 } from '../controllers/driverController.js';
 import { protectDriver } from '../middleware/authMiddleware.js';
 

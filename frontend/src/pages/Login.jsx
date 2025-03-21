@@ -5,7 +5,8 @@ import axios from 'axios';
 const Login = () => {
   const [formData, setFormData] = useState({
     email: '',
-    password: ''
+    password: '',
+    role: 'user' // Default role is 'user'
   });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -17,20 +18,55 @@ const Login = () => {
     setIsSubmitting(true);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/users/login', {
+      // Determine the login endpoint based on the selected role
+      let loginEndpoint;
+      switch (formData.role) {
+        case 'user':
+          loginEndpoint = 'http://localhost:5000/api/users/login';
+          break;
+        case 'driver':
+          loginEndpoint = 'http://localhost:5000/api/drivers/login';
+          break;
+        case 'admin':
+          loginEndpoint = 'http://localhost:5000/api/admins/login';
+          break;
+        default:
+          throw new Error('Invalid role selected');
+      }
+
+      const response = await axios.post(loginEndpoint, {
         email: formData.email,
         password: formData.password
       });
 
-      // Store user authentication data
+      // Store authentication data in local storage
       localStorage.setItem('token', response.data.token);
-      localStorage.setItem('userData', JSON.stringify({
-        id: response.data._id,
-        name: response.data.name
-      }));
-      
-      // Redirect to pickup scheduling page
-      navigate('/add-pickup');
+
+      switch (formData.role) {
+        case 'user':
+          localStorage.setItem('userData', JSON.stringify({
+            id: response.data._id,
+            name: response.data.name
+          }));
+          navigate('/add-pickup'); // Redirect to user dashboard
+          break;
+        case 'driver':
+          localStorage.setItem('driverData', JSON.stringify({
+            id: response.data._id,
+            name: `${response.data.firstName} ${response.data.lastName}`
+          }));
+          navigate('/home'); // Redirect to driver dashboard
+          break;
+        case 'admin':
+          localStorage.setItem('adminData', JSON.stringify({
+            id: response.data._id,
+            name: response.data.name
+          }));
+          navigate('/admin-dashboard'); // Redirect to admin dashboard
+          break;
+        default:
+          throw new Error('Invalid role selected');
+      }
     } catch (err) {
       const errorMessage = err.response?.data?.error || 
                           err.message || 
@@ -54,10 +90,28 @@ const Login = () => {
         <div className="col-md-6 col-lg-4">
           <div className="card shadow-lg">
             <div className="card-body p-4">
-              <h2 className="text-center mb-4 fw-bold text-primary">User Login</h2>
+              <h2 className="text-center mb-4 fw-bold text-primary">Login</h2>
               {error && <div className="alert alert-danger">{error}</div>}
               
               <form onSubmit={handleSubmit}>
+                {/* Role Selection */}
+                <div className="mb-3">
+                  <label htmlFor="role" className="form-label">Login As</label>
+                  <select
+                    className="form-select"
+                    id="role"
+                    name="role"
+                    value={formData.role}
+                    onChange={handleInputChange}
+                    required
+                  >
+                    <option value="user">User</option>
+                    <option value="driver">Driver</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+
+                {/* Email Input */}
                 <div className="mb-3">
                   <label htmlFor="email" className="form-label">Email</label>
                   <input
@@ -71,6 +125,7 @@ const Login = () => {
                   />
                 </div>
 
+                {/* Password Input */}
                 <div className="mb-4">
                   <label htmlFor="password" className="form-label">Password</label>
                   <input
@@ -84,6 +139,7 @@ const Login = () => {
                   />
                 </div>
 
+                {/* Submit Button */}
                 <button 
                   type="submit" 
                   className="btn btn-primary w-100 py-2"
@@ -98,6 +154,7 @@ const Login = () => {
                 </button>
               </form>
 
+              {/* Register Link */}
               <div className="mt-3 text-center">
                 <p>
                   Don't have an account?{' '}

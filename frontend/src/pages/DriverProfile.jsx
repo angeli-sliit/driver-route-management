@@ -13,8 +13,6 @@ const DriverProfile = () => {
       const token = localStorage.getItem('token');
       if (!token) {
         setError('No authentication token found');
-        // Optionally, redirect to login page
-        // window.location.href = '/login'; // or use React Router
         return;
       }
   
