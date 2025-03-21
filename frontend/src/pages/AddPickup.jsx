@@ -53,12 +53,12 @@ const AddPickup = () => {
       alert('Please accept the terms and conditions.');
       return;
     }
-
+  
     if (!position) {
       alert('Please select a location on the map.');
       return;
     }
-
+  
     try {
       const formPayload = {
         ...formData,
@@ -67,19 +67,19 @@ const AddPickup = () => {
           coordinates: [position.lng, position.lat], // [longitude, latitude]
         },
       };
-
+  
       const token = localStorage.getItem('token');
       const response = await axios.post('http://localhost:5000/api/pickups/add', formPayload, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
+  
       if (response.data.error) {
         alert(response.data.error);
         return;
       }
-
+  
       const pickupId = response.data._id;
-      navigate(`/pickup-details/${pickupId}`);
+      navigate(`/pickup-details/${pickupId}`); // Navigate to PickupDetails page
     } catch (err) {
       console.error('Error scheduling pickup:', err);
       if (err.response) {
@@ -113,7 +113,7 @@ const AddPickup = () => {
         </div>
 
         <div className="mb-3">
-          <label>Estimated Amount</label>
+          <label>Estimated Wight</label>
           <input
             type="number"
             className="form-control"

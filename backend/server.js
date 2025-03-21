@@ -6,6 +6,8 @@ import connectDB from './config/db.js';
 import driverRoutes from './routes/driverRoutes.js';
 import pickupRoutes from './routes/pickupRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import fuelPriceRoutes from './routes/fuelPriceRoutes.js';
 import { protectUser } from './middleware/authMiddleware.js'; // Import protectUser
 
 dotenv.config();
@@ -19,6 +21,8 @@ app.use(express.json());
 app.use('/api/drivers', driverRoutes);
 app.use('/api/pickups', pickupRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/admins', adminRoutes);
+app.use('/api/fuel-price', fuelPriceRoutes);
 
 // Protected route example
 app.get('/api/protected', protectUser, (req, res) => {

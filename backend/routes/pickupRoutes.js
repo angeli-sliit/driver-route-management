@@ -1,27 +1,53 @@
 import express from 'express';
+import multer from 'multer'; // Add this import for multer
 import {
   schedulePickup,
   assignPickup,
+  assignPickups,
   updatePickupStatus,
   listPickups,
+  getPickupById,
+  getAllPickups,
+  generatePickupPDF,
+  getUserScheduledPickups,
   optimizeRoute,
+  updatePickupDetails,
+  deletePickup
 } from '../controllers/pickupController.js';
-import { protectUser, protectDriver } from '../middleware/authMiddleware.js'; 
-import multer from 'multer';
-const upload = multer({ dest: 'uploads/' });
 
-
+import { protectUser, protectDriver, protectAny } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// Protected routes
+// Set up multer storage configuration
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/'); // specify the folder to store uploaded files
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + '-' + file.originalname); // specify the filename
+  },
+});
 
-router.post('/add', protectUser, upload.single('itemImage'), schedulePickup);
+// Initialize multer with the storage configuration
+const upload = multer({ storage: storage });
+
+// Protected routes
+router.post('/add', protectAny, upload.single('itemImage'), schedulePickup);
 router.post('/assign', protectDriver, assignPickup);
 router.post('/update-status', protectDriver, updatePickupStatus);
 router.get('/me', protectDriver, listPickups);
 router.post('/optimize-route', protectDriver, optimizeRoute);
-
+router.get('/user/scheduled-pickups', protectUser, getUserScheduledPickups);
+router.get('/nowShedule/:id', protectAny, getPickupById);
 router.get('/', protectDriver, listPickups);
+router.put('/pickup/:id', protectUser, updatePickupStatus);
+router.get('/all', protectUser, getAllPickups);
+router.get('/generate-pdf', protectDriver, generatePickupPDF);
+router.put('/update/:id', protectUser, updatePickupDetails);
+router.delete('/delete/:id', protectUser, deletePickup);
+
+router.post('/assign-pickups', assignPickups);
+
 
 export default router;

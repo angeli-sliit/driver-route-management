@@ -28,8 +28,8 @@ const driverSchema = new mongoose.Schema({
   joinedDate: { type: Date, required: true },
   status: {  
     type: String, 
-    enum: ['available', 'on-route', 'unavailable'], 
-    default: 'available' 
+    enum: ['available', 'on-route', 'unavailable', 'busy'],
+    default: 'available'
   },
   vehicleType: { type: String },
   vehicleNumber: { type: String, unique: true },
@@ -37,11 +37,20 @@ const driverSchema = new mongoose.Schema({
     type: {
       type: String,
       enum: ['Point'],
-      required: true
+      required: true,
+      default: 'Point'
     },
     coordinates: {
       type: [Number],
-      required: true
+      required: true,
+      validate: {
+        validator: function(v) {
+          return v[0] >= -180 && v[0] <= 180 && 
+                 v[1] >= -90 && v[1] <= 90;
+        },
+        message: props => `Invalid coordinates!`
+      },
+      default: [79.8612, 6.9271] // Default to Colombo coordinates
     }
   },
   profilePicture: { type: String }

@@ -81,11 +81,11 @@ export const loginDriver = async (req, res) => {
         email: driver.email,
       },
     });
-
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
+
 
 // Get all drivers
 export const getDrivers = async (req, res) => {
@@ -97,9 +97,13 @@ export const getDrivers = async (req, res) => {
   }
 };
 
-// Get current authenticated driver's profile
+// controllers/driverController.js
 export const getCurrentDriver = async (req, res) => {
   try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ error: 'Not authorized' });
+    }
+
     const driver = await Driver.findById(req.user.id).select('-password');
     if (!driver) {
       return res.status(404).json({ error: 'Driver not found' });
@@ -148,10 +152,10 @@ export const updateDriver = async (req, res) => {
 // Update driver location
 export const updateDriverLocation = async (req, res) => {
   try {
-    const { driverId, lat, lng } = req.body;
+    const { lat, lng } = req.body;
     const driver = await Driver.findByIdAndUpdate(
-      driverId,
-      { currentLocation: { lat, lng } },
+      req.user.id, // Use authenticated driver's ID
+      { currentLocation: { type: 'Point', coordinates: [lng, lat] } },
       { new: true }
     );
     res.status(200).json(driver);
@@ -175,20 +179,50 @@ export const deleteDriver = async (req, res) => {
 };
 
 // Upload Profile Picture
+import multer from 'multer';
+import path from 'path';
+
+// Multer configuration
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${req.user.id}-${Date.now()}${path.extname(file.originalname)}`);
+  },
+});
+
+const upload = multer({ storage });
+
 export const uploadProfilePicture = async (req, res) => {
   try {
-    const driverId = req.user.id; // Assuming the driver is authenticated
-    const { profilePicture } = req.body; // Base64-encoded image
-
     const driver = await Driver.findByIdAndUpdate(
-      driverId,
-      { profilePicture },
+      req.user.id,
+      { profilePicture: req.file.path },
       { new: true }
     ).select('-password');
 
     if (!driver) {
       return res.status(404).json({ error: 'Driver not found' });
     }
+
+    res.status(200).json(driver);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+// driverController.js
+export const markAttendance = async (req, res) => {
+  try {
+    const { date, driverId, status } = req.body;
+    const driver = await Driver.findById(driverId);
+    if (!driver) {
+      return res.status(404).json({ error: "Driver not found" });
+    }
+
+    driver.attendance = driver.attendance || [];
+    driver.attendance.push({ date, status });
+    await driver.save();
 
     res.status(200).json(driver);
   } catch (err) {
