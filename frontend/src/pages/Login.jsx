@@ -17,19 +17,20 @@ const Login = () => {
     setIsSubmitting(true);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/drivers/login', {
+      const response = await axios.post('http://localhost:5000/api/users/login', {
         email: formData.email,
         password: formData.password
       });
 
-      // Store authentication data
+      // Store user authentication data
       localStorage.setItem('token', response.data.token);
-      localStorage.setItem('driverData', JSON.stringify({
-        id: response.data.driver._id,
-        name: response.data.driver.name
+      localStorage.setItem('userData', JSON.stringify({
+        id: response.data._id,
+        name: response.data.name
       }));
       
-      navigate('/home');
+      // Redirect to pickup scheduling page
+      navigate('/add-pickup');
     } catch (err) {
       const errorMessage = err.response?.data?.error || 
                           err.message || 
@@ -53,7 +54,7 @@ const Login = () => {
         <div className="col-md-6 col-lg-4">
           <div className="card shadow-lg">
             <div className="card-body p-4">
-              <h2 className="text-center mb-4 fw-bold text-primary">Driver Login</h2>
+              <h2 className="text-center mb-4 fw-bold text-primary">User Login</h2>
               {error && <div className="alert alert-danger">{error}</div>}
               
               <form onSubmit={handleSubmit}>
@@ -67,7 +68,6 @@ const Login = () => {
                     value={formData.email}
                     onChange={handleInputChange}
                     required
-                    autoComplete="username"
                   />
                 </div>
 
@@ -81,7 +81,6 @@ const Login = () => {
                     value={formData.password}
                     onChange={handleInputChange}
                     required
-                    autoComplete="current-password"
                   />
                 </div>
 
@@ -98,6 +97,18 @@ const Login = () => {
                   ) : 'Login'}
                 </button>
               </form>
+
+              <div className="mt-3 text-center">
+                <p>
+                  Don't have an account?{' '}
+                  <button 
+                    className="btn btn-link p-0"
+                    onClick={() => navigate('/register')}
+                  >
+                    Register here
+                  </button>
+                </p>
+              </div>
             </div>
           </div>
         </div>
