@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import axios from "axios";
 import "leaflet/dist/leaflet.css";
+import { io } from 'socket.io-client';
 
 // Fix marker issue in Leaflet with Vite
 delete L.Icon.Default.prototype._getIconUrl;
@@ -10,6 +11,11 @@ L.Icon.Default.mergeOptions({
   iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
   iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
   shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+});
+
+const socket = io('http://localhost:5000');
+socket.on('connect', () => {
+  console.log('Connected to server via WebSocket');
 });
 
 const DriverMap = () => {

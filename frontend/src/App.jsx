@@ -25,9 +25,7 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
 
-
         {/* Protected routes */}
-
         <Route path="/home" element={
           <ProtectedRoute>
             <Home />
@@ -63,7 +61,6 @@ function App() {
             <ToBeCollected />
           </ProtectedRoute>
         } />
-        
 
         {/* Default redirect for unmatched routes */}
         <Route path="*" element={<Navigate to="/" />} />

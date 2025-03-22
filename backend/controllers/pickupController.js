@@ -4,6 +4,8 @@ import { PDFDocument } from 'pdf-lib';
 import User from '../models/User.js';
 import { getOptimizedRoute } from '../utils/googleMaps.js';
 
+import { optimizePickups } from '../utils/optimizePickups.js';
+
 // Optimize route using Google Maps API
 export const optimizeRoute = async (req, res) => {
   try {
@@ -76,34 +78,123 @@ export const schedulePickup = async (req, res) => {
 };
 
 // Assign a pickup to a driver (ADD THIS EXPORT)
+// export const assignPickup = async (req, res) => {
+//   try {
+//     const { pickupId, driverId } = req.body;
+
+//     const pickup = await Pickup.findById(pickupId);
+//     const driver = await Driver.findById(driverId);
+
+//     if (!pickup) return res.status(404).json({ error: "Pickup not found" });
+//     if (!driver) return res.status(404).json({ error: "Driver not found" });
+//     if (driver.status !== 'available') {
+//       return res.status(400).json({ error: "Driver is not available" });
+//     }
+
+//     // Check if pickup is already assigned
+//     if (pickup.driver) {
+//       return res.status(400).json({ error: "Pickup is already assigned to a driver" });
+//     }
+
+//     pickup.driver = driverId;
+//     pickup.status = 'assigned';
+//     await pickup.save();
+
+//     // Update driver status to busy
+//     driver.status = 'busy';
+//     await driver.save();
+
+//     res.status(200).json(pickup);
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// };
+// controllers/pickupController.js
 export const assignPickup = async (req, res) => {
   try {
-    const { pickupId, driverId } = req.body;
+    const { date } = req.body;
 
-    const pickup = await Pickup.findById(pickupId);
-    const driver = await Driver.findById(driverId);
+    // Fetch all pending pickups for the given date
+    const pickups = await Pickup.find({
+      scheduledTime: { $gte: new Date(date) },
+      status: 'pending',
+    });
 
-    if (!pickup) return res.status(404).json({ error: "Pickup not found" });
-    if (!driver) return res.status(404).json({ error: "Driver not found" });
-    if (driver.status !== 'available') {
-      return res.status(400).json({ error: "Driver is not available" });
+    // Fetch all available drivers
+    const drivers = await Driver.find({ status: 'available' });
+
+    if (drivers.length === 0) {
+      return res.status(400).json({ error: 'No available drivers' });
     }
 
-    // Check if pickup is already assigned
-    if (pickup.driver) {
-      return res.status(400).json({ error: "Pickup is already assigned to a driver" });
+    // Start timing the assignment process
+    console.time('Assign pickups');
+
+    // Start timeout tracking
+    const startTime = Date.now();
+    const timeout = 10000; // 10 seconds
+
+    // Batch updates
+    const pickupUpdates = [];
+    const driverUpdates = [];
+
+    // Assign pickups to drivers
+    for (const pickup of pickups) {
+      // Check if the process has exceeded the timeout
+      if (Date.now() - startTime > timeout) {
+        throw new Error('Assignment process timed out');
+      }
+
+      console.log(`Processing pickup: ${pickup._id}`); // Log pickup ID
+      let minDistance = Infinity;
+      let assignedDriver = null;
+
+      // Find the nearest driver for this pickup
+      for (const driver of drivers) {
+        console.log(`Checking driver: ${driver._id}`); // Log driver ID
+
+        const distance = calculateDistance(
+          driver.currentLocation.coordinates[1],
+          driver.currentLocation.coordinates[0],
+          pickup.location.coordinates[1],
+          pickup.location.coordinates[0]
+        );
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          assignedDriver = driver;
+        }
+      }
+
+      if (assignedDriver) {
+        // Assign pickup to the nearest driver
+        pickupUpdates.push({
+          updateOne: {
+            filter: { _id: pickup._id },
+            update: { $set: { driver: assignedDriver._id, status: 'assigned' } },
+          },
+        });
+
+        // Update driver status to busy
+        driverUpdates.push({
+          updateOne: {
+            filter: { _id: assignedDriver._id },
+            update: { $set: { status: 'busy' } },
+          },
+        });
+      }
     }
 
-    pickup.driver = driverId;
-    pickup.status = 'assigned';
-    await pickup.save();
+    // Perform batch updates
+    await Pickup.bulkWrite(pickupUpdates);
+    await Driver.bulkWrite(driverUpdates);
 
-    // Update driver status to busy
-    driver.status = 'busy';
-    await driver.save();
+    // End timing the assignment process
+    console.timeEnd('Assign pickups');
 
-    res.status(200).json(pickup);
+    res.status(200).json({ message: 'Pickups assigned successfully' });
   } catch (err) {
+    console.error('Error in assignPickups:', err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -189,37 +280,59 @@ export const getPickupById = async (req, res) => {
   }
 };
 
+// Controller
 export const getAllPickups = async (req, res) => {
   try {
     const { date } = req.query;
-    const query = date ? { scheduledTime: { $gte: new Date(date) } } : {};
+
+    // If a date is provided, filter pickups for that specific date
+    const query = date ? { 
+      scheduledTime: { 
+        $gte: new Date(new Date(date).setHours(0, 0, 0, 0)), // Start of the day
+        $lt: new Date(new Date(date).setHours(23, 59, 59, 999)) // End of the day
+      } 
+    } : {};
+
     const pickups = await Pickup.find(query)
       .populate('driver', 'firstName lastName')
       .populate('user', 'name');
+
     res.status(200).json(pickups);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
+// Route
+
 
 export const generatePickupPDF = async (req, res) => {
   try {
     const { date } = req.query;
     const query = date ? { scheduledTime: { $gte: new Date(date) } } : {};
     const pickups = await Pickup.find(query)
-      .populate('driver', 'firstName lastName')
+      .populate('driver', 'firstName lastName vehicleType')
       .populate('user', 'name');
 
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage();
     const { width, height } = page.getSize();
     const fontSize = 12;
-    const text = pickups.map(p => `${p.user.name} - ${p.address}`).join('\n');
-    
-    page.drawText(text, {
-      x: 50,
-      y: height - 4 * fontSize,
-      size: fontSize,
+
+    let y = height - 50;
+    page.drawText('Pickup Schedule Report', { x: 50, y, size: fontSize + 4, bold: true });
+    y -= 30;
+
+    pickups.forEach(pickup => {
+      const text = `
+        User: ${pickup.user.name}
+        Address: ${pickup.address}
+        Scheduled Time: ${pickup.scheduledTime.toLocaleString()}
+        Driver: ${pickup.driver.firstName} ${pickup.driver.lastName}
+        Vehicle: ${pickup.driver.vehicleType}
+        Fuel Cost: Rs. ${pickup.fuelCost.toFixed(2)}
+      `;
+      page.drawText(text, { x: 50, y, size: fontSize });
+      y -= 80; // Move down for the next pickup
     });
 
     const pdfBytes = await pdfDoc.save();
@@ -299,13 +412,24 @@ export const deletePickup = async (req, res) => {
       return res.status(400).json({ error: 'Cannot delete. Pickup time is less than 24 hours away.' });
     }
 
+    // If the pickup is assigned, set the driver's status back to 'available'
+    if (pickup.driver) {
+      const driver = await Driver.findById(pickup.driver);
+      if (driver) {
+        driver.status = 'available';
+        await driver.save();
+      }
+    }
+
     await Pickup.findByIdAndDelete(req.params.id);
     res.status(200).json({ message: 'Pickup deleted successfully' });
   } catch (error) {
     console.error('Delete error:', error);
-    res.status(500).json({ error: 'Failed to delete pickup: ' + error.message });
+    res.status(500).json({ error: 'Server error: ' + error.message });
   }
 };
+
+
 
 
 // Helper function to calculate distance using Haversine formula
@@ -378,3 +502,83 @@ export const assignPickups = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+
+
+export const optimizedAssignment = async (req, res) => {
+  try {
+    const { date } = req.body;
+    const fuelPrice = await FuelPrice.findOne().sort({ effectiveDate: -1 });
+
+    // Fetch all pending pickups for the given date
+    const pickups = await Pickup.find({
+      scheduledTime: { $gte: new Date(date) },
+      status: 'pending'
+    });
+
+    // Fetch all available drivers
+    const drivers = await Driver.find({ status: 'available' });
+
+    // Optimize pickups
+    const assignments = optimizePickups(pickups, drivers, fuelPrice.price);
+
+    // Save assignments to the database
+    for (const assignment of assignments) {
+      await Pickup.findByIdAndUpdate(assignment.pickup, {
+        driver: assignment.driver,
+        status: 'assigned',
+        fuelCost: assignment.fuelCost
+      });
+
+      await Driver.findByIdAndUpdate(assignment.driver, {
+        status: 'busy'
+      });
+    }
+
+    res.status(200).json({ message: `${assignments.length} pickups assigned optimally` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+export const assign = async (req, res) => {
+  try {
+    const { date } = req.body;
+
+    // Fetch all pending pickups for the given date
+    const pickups = await Pickup.find({
+      scheduledTime: { $gte: new Date(date) },
+      status: 'pending',
+    });
+
+    // Fetch all available drivers
+    const drivers = await Driver.find({ status: 'available' });
+
+    if (drivers.length === 0) {
+      return res.status(400).json({ error: 'No available drivers' });
+    }
+
+    // Optimize pickups
+    const optimizedSchedule = optimizePickups(pickups, drivers);
+
+    // Save assignments to the database
+    for (const pickup of optimizedSchedule) {
+      await Pickup.findByIdAndUpdate(pickup._id, {
+        driver: pickup.driver._id,
+        status: 'assigned',
+        fuelCost: pickup.fuelCost,
+      });
+
+      await Driver.findByIdAndUpdate(pickup.driver._id, {
+        status: 'busy',
+      });
+    }
+
+    res.status(200).json({ message: 'Pickups assigned successfully', optimizedSchedule });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+

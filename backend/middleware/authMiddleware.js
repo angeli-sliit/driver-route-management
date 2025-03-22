@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import Driver from '../models/Driver.js';
+import Admin from '../models/Admin.js';
 
 // Middleware to protect USER routes
 export const protectUser = async (req, res, next) => {
@@ -84,23 +85,22 @@ const sendAuthError = (res, message) => res.status(401).json({
 //admin protection middleware
 export const protectAdmin = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
-
   if (!token) {
     return res.status(401).json({ error: 'Not authorized, no token provided' });
   }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const admin = await Admin.findById(decoded.id).select('-password');
+    const admin = await Admin.findById(decoded.id);
 
     if (!admin) {
-      return res.status(401).json({ error: 'Admin not found' });
+      return res.status(401).json({ error: 'Invalid token' });
     }
 
     req.admin = admin;
     next();
   } catch (error) {
-    res.status(401).json({ error: 'Invalid token' });
+    res.status(401).json({ error: 'Invalid token ' });
   }
 };
 // Universal protection middleware
@@ -133,7 +133,7 @@ export const protectAny = async (req, res, next) => {
   } catch (error) {
     const message = error.name === 'TokenExpiredError' 
       ? 'Token expired' 
-      : 'Invalid token';
+      : 'Invalid token ';
     sendAuthError(res, message);
   }
 };

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import MapComponent from '../components/MapComponent';
 import { PDFDownloadLink } from '@react-pdf/renderer';
-import PickupListPDF from '../components/PickupListPDF';
+import PickupListPDF from '../components/DriverPickupListPDF';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PickupConfirmationModal from '../components/PickupConfirmationModal';
