@@ -42,7 +42,7 @@ const styles = StyleSheet.create({
   },
 });
 
-const PickupListPDF = ({ pickups }) => (
+const DriverPickupListPDF = ({ pickups }) => (
   <Document>
     <Page style={styles.page}>
       <Text style={styles.header}>Today's Pickup List</Text>
@@ -71,4 +71,8 @@ const PickupListPDF = ({ pickups }) => (
   </Document>
 );
 
-export default PickupListPDF;
+
+
+
+
+export default DriverPickupListPDF;

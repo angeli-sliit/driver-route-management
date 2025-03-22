@@ -1,340 +1,204 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Button, Alert, Form, Card, Table, Modal } from 'react-bootstrap';
 import axios from 'axios';
-import { Spinner, Card, ListGroup, Button, Modal, Form, Alert } from 'react-bootstrap';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+import { PDFDownloadLink } from '@react-pdf/renderer';
+import PickupListPDF from '../components/AdminPickupListPDF.jsx';
 
-// Fix leaflet marker icons
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-});
-
-const ToBeCollected = () => {
+const AdminDashboard = () => {
+  const [date, setDate] = useState('');
+  const [message, setMessage] = useState('');
+  const [fuelPrice, setFuelPrice] = useState(0);
   const [pickups, setPickups] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedPickup, setSelectedPickup] = useState(null);
-  const [showModal, setShowModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [pickupToDelete, setPickupToDelete] = useState(null);
-  const [formData, setFormData] = useState({
-    contactNumber: '',
-    chooseItem: '',
-    estimatedAmount: '',
-    pickupType: 'general',
-    address: '',
-    scheduledTime: '',
-    location: { type: 'Point', coordinates: [6.9271, 79.8612] },
-  });
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [mapCenter, setMapCenter] = useState([6.9271, 79.8612]);
-  const [mapZoom] = useState(13);
+  const [drivers, setDrivers] = useState([]);
+  const [showPickupDetails, setShowPickupDetails] = useState(false);
+  const [selectedDatePickups, setSelectedDatePickups] = useState([]);
 
   useEffect(() => {
-    const fetchPickups = async () => {
+    const fetchData = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await axios.get('http://localhost:5000/api/pickups/user/scheduled-pickups', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setPickups(response.data);
+        if (!token) throw new Error('No authentication token found');
+
+        const [pickupsRes, driversRes, fuelRes] = await Promise.all([
+          axios.get('http://localhost:5000/api/pickups/all', { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get('http://localhost:5000/api/drivers', { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get('http://localhost:5000/api/fuel-price/current', { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+
+        setPickups(pickupsRes.data);
+        setDrivers(driversRes.data || []);
+        setFuelPrice(parseFloat(fuelRes.data?.price) || 0);
       } catch (err) {
-        console.error('Error fetching pickups:', err);
-        setError('Failed to fetch pickups.');
-      } finally {
-        setLoading(false);
+        console.error('Fetch error:', err);
+        setMessage(err.response?.data?.error || err.message || 'Failed to load data');
       }
     };
-
-    fetchPickups();
+    fetchData();
   }, []);
 
-  const handleUpdateClick = (pickup) => {
-    const now = new Date();
-    const scheduledTime = new Date(pickup.scheduledTime);
-    const timeDifference = scheduledTime - now;
-
-    if (timeDifference < 24 * 60 * 60 * 1000) {
-      setError('Cannot update. Pickup time is less than 24 hours away.');
-      setTimeout(() => setError(''), 3000);
-      return;
-    }
-
-    setSelectedPickup(pickup);
-    setFormData({
-      contactNumber: pickup.contactNumber,
-      chooseItem: pickup.chooseItem,
-      estimatedAmount: pickup.estimatedAmount,
-      pickupType: pickup.pickupType,
-      address: pickup.address,
-      scheduledTime: new Date(pickup.scheduledTime).toISOString().slice(0, 16),
-      location: pickup.location || { type: 'Point', coordinates: [6.9271, 79.8612] },
-    });
-
-    if (pickup.location?.coordinates) {
-      setMapCenter([pickup.location.coordinates[1], pickup.location.coordinates[0]]);
-    }
-    setShowModal(true);
-  };
-
-  const handleDeleteClick = (pickup) => {
-    const now = new Date();
-    const scheduledTime = new Date(pickup.scheduledTime);
-    const timeDifference = scheduledTime - now;
-
-    if (timeDifference < 24 * 60 * 60 * 1000) {
-      setError('Cannot delete. Pickup time is less than 24 hours away.');
-      setTimeout(() => setError(''), 3000);
-      return;
-    }
-
-    setPickupToDelete(pickup);
-    setShowDeleteModal(true);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!pickupToDelete) return;
-
-    const now = new Date();
-    const scheduledTime = new Date(pickupToDelete.scheduledTime);
-    const timeDifference = scheduledTime - now;
-
-    if (timeDifference < 24 * 60 * 60 * 1000) {
-      setError('Cannot delete. Pickup time is less than 24 hours away.');
-      setTimeout(() => setError(''), 3000);
-      setShowDeleteModal(false);
-      return;
-    }
-
+  const handleAssignPickups = async () => {
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`http://localhost:5000/api/pickups/delete/${pickupToDelete._id}`, {
+      if (!token) throw new Error('No authentication token found');
+
+      // Fetch pickups for the selected date
+      const response = await axios.get(`http://localhost:5000/api/pickups/all?date=${date}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      setPickups(pickups.filter((p) => p._id !== pickupToDelete._id));
-      setSuccess('Pickup deleted successfully!');
-      setTimeout(() => setSuccess(''), 3000);
+      // Set the pickups for the selected date
+      setSelectedDatePickups(response.data);
+      setShowPickupDetails(true); // Show the modal with pickup details
+      setMessage(`Found ${response.data.length} pickups for ${date}`);
     } catch (err) {
-      console.error('Delete error:', err);
-      setError(err.response?.data?.error || 'Failed to delete pickup.');
-      setTimeout(() => setError(''), 3000);
-    } finally {
-      setShowDeleteModal(false);
+      console.error('Assignment error:', err);
+      setMessage(err.response?.data?.error || err.message || 'Failed to fetch pickups');
     }
   };
 
-  const handleFormChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prevData) => ({ ...prevData, [name]: value }));
-  };
-
-  const handleMapClick = (e) => {
-    const { lat, lng } = e.latlng;
-    setMapCenter([lat, lng]);
-    setFormData((prevData) => ({
-      ...prevData,
-      location: { type: 'Point', coordinates: [lng, lat] },
-    }));
-  };
-
-  const handleSaveChanges = async () => {
-    if (!selectedPickup) return;
-
+  const handleFuelPriceUpdate = async () => {
     try {
       const token = localStorage.getItem('token');
-      const payload = {
-        ...formData,
-        location: {
-          type: 'Point',
-          coordinates: [mapCenter[1], mapCenter[0]],
-        },
-      };
+      if (!token) throw new Error('No authentication token found');
 
-      const response = await axios.put(
-        `http://localhost:5000/api/pickups/update/${selectedPickup._id}`,
-        payload,
+      await axios.post(
+        'http://localhost:5000/api/fuel-price/update',
+        { price: parseFloat(fuelPrice) || 0 },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-
-      setPickups(pickups.map((p) => (p._id === selectedPickup._id ? response.data : p)));
-      setSuccess('Pickup updated successfully!');
-      setShowModal(false);
-      setTimeout(() => setSuccess(''), 3000);
+      setMessage('Fuel price updated successfully!');
     } catch (err) {
-      console.error('Update error:', err);
-      setError(err.response?.data?.error || 'Failed to update pickup.');
-      setTimeout(() => setError(''), 3000);
+      console.error('Fuel price error:', err);
+      setMessage(err.response?.data?.error || err.message || 'Failed to update fuel price');
     }
   };
 
-  if (loading) {
-    return (
-      <div className="d-flex justify-content-center align-items-center" style={{ height: '100vh' }}>
-        <Spinner animation="border" />
-      </div>
-    );
-  }
+  // Ensure drivers is always an array
+  const driverData = Array.isArray(drivers) ? drivers : [];
 
   return (
     <div className="container mt-4">
-      <h2>To Be Collected</h2>
-      {error && <Alert variant="danger">{error}</Alert>}
-      {success && <Alert variant="success">{success}</Alert>}
+      <h2 className="mb-4">Admin Dashboard</h2>
 
-      {pickups.length > 0 ? (
-        <ListGroup>
-          {pickups.map((pickup) => (
-            <ListGroup.Item key={pickup._id} className="mb-3">
-              <Card>
-                <Card.Body>
-                  <h5>Contact: {pickup.contactNumber}</h5>
-                  <p>Scheduled: {new Date(pickup.scheduledTime).toLocaleString()}</p>
-                  <p>Item: {pickup.chooseItem}</p>
-                  <p>Amount: LKR {pickup.estimatedAmount}</p>
-                  <p>Type: {pickup.pickupType}</p>
-                  <p>Address: {pickup.address}</p>
-                  <p>Status: {pickup.status}</p>
-                  <Button variant="primary" onClick={() => handleUpdateClick(pickup)}>
-                    Update
-                  </Button>
-                  <Button variant="danger" onClick={() => handleDeleteClick(pickup)} className="ms-2">
-                    Delete
-                  </Button>
-                </Card.Body>
-              </Card>
-            </ListGroup.Item>
-          ))}
-        </ListGroup>
-      ) : (
-        <p>No scheduled pickups found</p>
-      )}
+      {/* Fuel Price Section */}
+      <Card className="mb-4">
+        <Card.Body>
+          <Card.Title>Fuel Price Management</Card.Title>
+          <div className="d-flex gap-3">
+            <Form.Control
+              type="number"
+              value={fuelPrice}
+              onChange={(e) => setFuelPrice(parseFloat(e.target.value) || 0)}
+              placeholder="Enter fuel price"
+              min="0"
+              step="0.01"
+            />
+            <Button onClick={handleFuelPriceUpdate}>Update Fuel Price</Button>
+          </div>
+        </Card.Body>
+      </Card>
 
-      {/* Update Pickup Modal */}
-      <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
+      {/* Pickup Assignment Section */}
+      <Card className="mb-4">
+        <Card.Body>
+          <Card.Title>Pickup Assignment</Card.Title>
+          <div className="d-flex gap-3 mb-3">
+            <Form.Control
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              required
+            />
+            <Button onClick={handleAssignPickups}>Assign Pickups</Button>
+          </div>
+
+          <PDFDownloadLink
+            document={<PickupListPDF 
+              pickups={pickups} 
+              drivers={driverData}
+              fuelPrice={parseFloat(fuelPrice)}
+            />}
+            fileName="optimized_pickups.pdf"
+          >
+            {({ loading }) => (
+              <Button variant="success" className="me-2">
+                {loading ? 'Generating Report...' : 'Download Report'}
+              </Button>
+            )}
+          </PDFDownloadLink>
+        </Card.Body>
+      </Card>
+
+      {/* Modal to display pickup details for the selected date */}
+      <Modal show={showPickupDetails} onHide={() => setShowPickupDetails(false)} size="lg">
         <Modal.Header closeButton>
-          <Modal.Title>Update Pickup Details</Modal.Title>
+          <Modal.Title>Pickup Details for {date}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <Form>
-            <Form.Group className="mb-3">
-              <Form.Label>Contact Number</Form.Label>
-              <Form.Control
-                type="tel"
-                name="contactNumber"
-                value={formData.contactNumber}
-                onChange={handleFormChange}
-              />
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label>Item Description</Form.Label>
-              <Form.Control
-                type="text"
-                name="chooseItem"
-                value={formData.chooseItem}
-                onChange={handleFormChange}
-              />
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label>Estimated Value (LKR)</Form.Label>
-              <Form.Control
-                type="number"
-                name="estimatedAmount"
-                value={formData.estimatedAmount}
-                onChange={handleFormChange}
-              />
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label>Pickup Type</Form.Label>
-              <Form.Select
-                name="pickupType"
-                value={formData.pickupType}
-                onChange={handleFormChange}
-              >
-                <option value="general">General</option>
-                <option value="urgent">Urgent</option>
-                <option value="fragile">Fragile</option>
-              </Form.Select>
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label>Address</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={3}
-                name="address"
-                value={formData.address}
-                onChange={handleFormChange}
-              />
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label>Scheduled Time</Form.Label>
-              <Form.Control
-                type="datetime-local"
-                name="scheduledTime"
-                value={formData.scheduledTime}
-                onChange={handleFormChange}
-              />
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label>Location (Click map to update)</Form.Label>
-              <div style={{ height: '300px', borderRadius: '8px', overflow: 'hidden' }}>
-                <MapContainer
-                  center={mapCenter}
-                  zoom={mapZoom}
-                  style={{ height: '100%', width: '100%' }}
-                  onClick={handleMapClick}
-                >
-                  <TileLayer
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  />
-                  <Marker position={mapCenter}>
-                    <Popup>Pickup Location</Popup>
-                  </Marker>
-                </MapContainer>
-              </div>
-            </Form.Group>
-          </Form>
+          <Table striped bordered hover>
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Address</th>
+                <th>Scheduled Time</th>
+                <th>Pickup Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              {selectedDatePickups.map((pickup) => (
+                <tr key={pickup._id}>
+                  <td>{pickup.user?.name}</td>
+                  <td>{pickup.address}</td>
+                  <td>{new Date(pickup.scheduledTime).toLocaleString()}</td>
+                  <td>{pickup.pickupType}</td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowModal(false)}>
-            Cancel
-          </Button>
-          <Button variant="success" onClick={handleSaveChanges}>
-            Save Changes
+          <Button variant="secondary" onClick={() => setShowPickupDetails(false)}>
+            Close
           </Button>
         </Modal.Footer>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
-      <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)}>
-        <Modal.Header closeButton>
-          <Modal.Title>Confirm Deletion</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>Are you sure you want to delete this pickup?</Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>
-            No
-          </Button>
-          <Button variant="danger" onClick={handleConfirmDelete}>
-            Yes
-          </Button>
-        </Modal.Footer>
-      </Modal>
+      {/* System Overview */}
+      <Card>
+        <Card.Body>
+          <Card.Title>System Overview</Card.Title>
+          <Table striped bordered hover>
+            <thead>
+              <tr>
+                <th>Driver</th>
+                <th>Pickups</th>
+                <th>Total Load</th>
+                <th>Fuel Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {driverData.map(driver => {
+                const driverPickups = pickups.filter(p => p.driver?._id === driver._id);
+                const totalLoad = driverPickups.reduce((sum, p) => sum + (p.estimatedAmount || 0), 0);
+                const totalFuelCost = driverPickups.reduce((sum, p) => sum + (p.fuelCost || 0), 0);
+
+                return (
+                  <tr key={driver._id}>
+                    <td>{driver.firstName} {driver.lastName}</td>
+                    <td>{driverPickups.length}</td>
+                    <td>{totalLoad.toFixed(2)} kg</td>
+                    <td>LKR {totalFuelCost.toFixed(2)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Table>
+        </Card.Body>
+      </Card>
+
+      {message && <Alert variant="info" className="mt-3">{message}</Alert>}
     </div>
   );
 };
 
-export default ToBeCollected;
+export default AdminDashboard;

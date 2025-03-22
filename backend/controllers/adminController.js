@@ -1,5 +1,8 @@
 import Admin from '../models/Admin.js';
 import jwt from 'jsonwebtoken';
+import { optimizePickups } from '../utils/optimizePickups.js';
+import Pickup from '../models/Pickup.js';
+import Driver from '../models/Driver.js';
 
 // Admin registration
 export const registerAdmin = async (req, res) => {
@@ -68,3 +71,5 @@ export const loginAdmin = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// Generate optimized pickup list and PDF
