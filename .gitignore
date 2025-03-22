@@ -1,0 +1,24 @@
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+backend/.env
+frontend/.env
+
+# Build directories
+dist/
+build/
+
+# Log files
+*.log
+
+# IDE settings
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Uploads folder (optional - ignore only if it’s not needed on GitHub)
+uploads/
