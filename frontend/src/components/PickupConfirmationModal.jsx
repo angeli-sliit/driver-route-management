@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Button, Form, Alert } from 'react-bootstrap';
 
-const PickupConfirmationModal = ({ show, onConfirm, onCancel, onClose, mode }) => {
+const PickupConfirmationModal = ({ show, onConfirm, onCancel, onClose, mode, image, setImage }) => {
   const [formData, setFormData] = useState({
     weight: '',
     amount: '',
@@ -12,11 +12,12 @@ const PickupConfirmationModal = ({ show, onConfirm, onCancel, onClose, mode }) =
 
   useEffect(() => {
     if (!show) {
-      // Reset form when modal closes
+      // Reset form and image when modal closes
       setFormData({ weight: '', amount: '', reason: '' });
       setErrors({});
+      setImage(null); // Reset image when modal closes
     }
-  }, [show]);
+  }, [show, setImage]);
 
   const validateForm = () => {
     const newErrors = {};
@@ -42,9 +43,11 @@ const PickupConfirmationModal = ({ show, onConfirm, onCancel, onClose, mode }) =
     
     try {
       if (mode === 'confirm') {
+        // Include the image in the confirmation data
         onConfirm({
           weight: parseFloat(formData.weight),
-          amount: parseFloat(formData.amount)
+          amount: parseFloat(formData.amount),
+          image: image // Pass the image file to the onConfirm handler
         });
       } else {
         onCancel(formData.reason);
@@ -105,6 +108,23 @@ const PickupConfirmationModal = ({ show, onConfirm, onCancel, onClose, mode }) =
                 <Form.Control.Feedback type="invalid">
                   {errors.amount}
                 </Form.Control.Feedback>
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Upload Proof Image</Form.Label>
+                <Form.Control
+                  type="file"
+                  onChange={(e) => setImage(e.target.files[0])}
+                  accept="image/*" // Allow only image files
+                />
+                {image && (
+                  <img
+                    src={URL.createObjectURL(image)}
+                    alt="Proof"
+                    className="mt-2"
+                    style={{ maxWidth: '100%', maxHeight: '200px', objectFit: 'contain' }}
+                  />
+                )}
               </Form.Group>
             </>
           )}

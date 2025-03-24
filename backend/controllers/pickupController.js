@@ -3,8 +3,9 @@ import Driver from '../models/Driver.js';
 import { PDFDocument } from 'pdf-lib';
 import User from '../models/User.js';
 import { getOptimizedRoute } from '../utils/googleMaps.js';
-
 import { optimizePickups } from '../utils/optimizePickups.js';
+import { calculateDistance } from '../utils/distanceCalculator.js';
+
 
 // Optimize route using Google Maps API
 export const optimizeRoute = async (req, res) => {
@@ -239,17 +240,17 @@ export const updatePickupStatus = async (req, res) => {
 // List all pickups
 export const listPickups = async (req, res) => {
   try {
-    const filter = req.originalUrl.includes('/me') 
-      ? { driver: req.user._id, status: 'assigned' } // Remove date filter
-      : { status: 'assigned' };
+    const driverId = req.driver._id; // Ensure the driver's ID is extracted correctly
 
-    const pickups = await Pickup.find(filter)
-      .populate('driver', 'firstName lastName')
-      .populate('user', 'name');
+    // Fetch pickups assigned to the driver
+    const pickups = await Pickup.find({ driver: driverId, status: 'assigned' })
+      .populate('user', 'name email')
+      .populate('driver', 'firstName lastName');
 
     res.status(200).json(pickups);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Error fetching pickups:', err);
+    res.status(500).json({ error: 'Failed to fetch pickups' });
   }
 };
 
@@ -302,13 +303,22 @@ export const getAllPickups = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
-// Route
+
 
 
 export const generatePickupPDF = async (req, res) => {
   try {
-    const { date } = req.query;
-    const query = date ? { scheduledTime: { $gte: new Date(date) } } : {};
+    const today = new Date();
+    const startOfDay = new Date(today.setHours(0, 0, 0, 0)); // Start of today
+    const endOfDay = new Date(today.setHours(23, 59, 59, 999)); // End of today
+
+    const query = { 
+      scheduledTime: { 
+        $gte: startOfDay, 
+        $lt: endOfDay 
+      } 
+    };
+
     const pickups = await Pickup.find(query)
       .populate('driver', 'firstName lastName vehicleType')
       .populate('user', 'name');
@@ -319,7 +329,7 @@ export const generatePickupPDF = async (req, res) => {
     const fontSize = 12;
 
     let y = height - 50;
-    page.drawText('Pickup Schedule Report', { x: 50, y, size: fontSize + 4, bold: true });
+    page.drawText('Today\'s Pickup Schedule Report', { x: 50, y, size: fontSize + 4, bold: true });
     y -= 30;
 
     pickups.forEach(pickup => {
@@ -430,81 +440,77 @@ export const deletePickup = async (req, res) => {
 };
 
 
-
-
-// Helper function to calculate distance using Haversine formula
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371; // Radius of the Earth in km
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; // Distance in km
-};
-
 // Assign pickups to drivers
 export const assignPickups = async (req, res) => {
   try {
     const { date } = req.body;
+    const fuelPrice = await FuelPrice.findOne().sort({ effectiveDate: -1 });
+    
+    const [pickups, drivers] = await Promise.all([
+      Pickup.find({
+        scheduledTime: { $gte: new Date(date) },
+        status: 'pending'
+      }),
+      Driver.find({ status: 'available' })
+    ]);
 
-    // Fetch all pending pickups for the given date
-    const pickups = await Pickup.find({
-      scheduledTime: { $gte: new Date(date) },
-      status: 'pending',
+    const assignments = [];
+    const sortedPickups = [...pickups].sort((a, b) => b.estimatedAmount - a.estimatedAmount);
+
+    drivers.forEach(driver => {
+      let capacity = TRUCK_CAPACITY[driver.vehicleType] || 0;
+      
+      sortedPickups.forEach(pickup => {
+        if (capacity >= pickup.estimatedAmount && !pickup.driver) {
+          const distance = calculateDistance(
+            driver.currentLocation.coordinates[1],
+            driver.currentLocation.coordinates[0],
+            pickup.location.coordinates[1],
+            pickup.location.coordinates[0]
+          );
+          
+          assignments.push({
+            pickupId: pickup._id,
+            driverId: driver._id,
+            fuelCost: distance * FUEL_CONSUMPTION * fuelPrice.price
+          });
+          
+          capacity -= pickup.estimatedAmount;
+          pickup.driver = driver._id;
+        }
+      });
     });
 
-    // Fetch all available drivers
-    const drivers = await Driver.find({ status: 'available' });
-
-    if (drivers.length === 0) {
-      return res.status(400).json({ error: 'No available drivers' });
-    }
-
-    // Assign pickups to drivers
-    for (const pickup of pickups) {
-      let minDistance = Infinity;
-      let assignedDriver = null;
-
-      // Find the nearest driver for this pickup
-      for (const driver of drivers) {
-        const distance = calculateDistance(
-          driver.currentLocation.coordinates[1],
-          driver.currentLocation.coordinates[0],
-          pickup.location.coordinates[1],
-          pickup.location.coordinates[0]
-        );
-
-        if (distance < minDistance) {
-          minDistance = distance;
-          assignedDriver = driver;
+    // Bulk update pickups
+    await Pickup.bulkWrite(assignments.map(assn => ({
+      updateOne: {
+        filter: { _id: assn.pickupId },
+        update: { 
+          $set: { 
+            driver: assn.driverId,
+            status: 'assigned',
+            fuelCost: assn.fuelCost
+          }
         }
       }
+    })));
 
-      if (assignedDriver) {
-        // Assign pickup to the nearest driver
-        pickup.driver = assignedDriver._id;
-        pickup.status = 'assigned';
-        await pickup.save();
-
-        // Update driver status to busy
-        assignedDriver.status = 'busy';
-        await assignedDriver.save();
+    // Update driver statuses (fixed section)
+    await Driver.bulkWrite(drivers.map(driver => ({
+      updateOne: {
+        filter: { _id: driver._id },
+        update: { $set: { status: 'busy' } }
       }
-    }
+    })));
 
-    res.status(200).json({ message: 'Pickups assigned successfully' });
+    res.status(200).json({ 
+      message: `Assigned ${assignments.length} pickups successfully`,
+      assignments
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
-
-
-
 export const optimizedAssignment = async (req, res) => {
   try {
     const { date } = req.body;
@@ -578,6 +584,62 @@ export const assign = async (req, res) => {
     res.status(200).json({ message: 'Pickups assigned successfully', optimizedSchedule });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+};
+
+export const assignDailyPickups = async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Get today's pickups
+    const pickups = await Pickup.find({
+      scheduledTime: { $gte: today },
+      status: 'pending'
+    }).populate('user', 'name');
+
+    // Get available drivers
+    const drivers = await Driver.find({
+      status: 'available',
+      'attendance.date': { $gte: today }
+    });
+
+    // Add your assignment logic here
+    const assignments = optimizePickups(pickups, drivers);
+
+    // Update database records
+    for (const assignment of assignments) {
+      await Pickup.findByIdAndUpdate(assignment.pickupId, {
+        driver: assignment.driverId,
+        status: 'assigned'
+      });
+
+      await Driver.findByIdAndUpdate(assignment.driverId, {
+        status: 'on-route'
+      });
+    }
+
+    res.status(200).json({ message: `${assignments.length} pickups assigned` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// pickupController.js
+export const completePickup = async (req, res) => {
+  try {
+    const pickup = await Pickup.findByIdAndUpdate(
+      req.params.id,
+      { 
+        status: 'completed',
+        completedAt: new Date(),
+        image: req.file ? `/uploads/${req.file.filename}` : null 
+      },
+      { new: true }
+    );
+    res.json(pickup);
+  } catch (err) {
+    res.status(500).json({ error: 'Completion failed' });
   }
 };
 

@@ -1,19 +1,23 @@
 import React, { useState, useEffect } from 'react';
+import { Card, Button, Spinner, Alert } from 'react-bootstrap';
+import axios from 'axios';
 import MapComponent from '../components/MapComponent';
-import { PDFDownloadLink } from '@react-pdf/renderer';
-import PickupListPDF from '../components/DriverPickupListPDF';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PickupConfirmationModal from '../components/PickupConfirmationModal';
 import { useNavigate } from 'react-router-dom';
+import { PDFDownloadLink } from '@react-pdf/renderer';
+import DriverPickupListPDF from '../components/DriverPickupListPDF';
 
 const DriverDashboard = () => {
-  const [location] = useState({ lat: 6.9271, lng: 79.8612 });
   const [pickups, setPickups] = useState([]);
+  const [currentLocation, setCurrentLocation] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [currentPickup, setCurrentPickup] = useState(null);
   const [actionMode, setActionMode] = useState('confirm');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [image, setImage] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -25,6 +29,10 @@ const DriverDashboard = () => {
       }
 
       try {
+        const today = new Date();
+        const startOfDay = new Date(today.setHours(0, 0, 0, 0)); // Start of today
+        const endOfDay = new Date(today.setHours(23, 59, 59, 999)); // End of today
+
         const response = await fetch('http://localhost:5000/api/pickups/me', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -36,13 +44,21 @@ const DriverDashboard = () => {
         }
 
         if (!response.ok) {
-          throw new Error('Failed to fetch pickups');
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const data = await response.json();
-        setPickups(data);
+        const responseData = await response.json();
+
+        // Filter pickups for today
+        const todayPickups = responseData.filter(pickup => {
+          const pickupDate = new Date(pickup.scheduledTime);
+          return pickupDate >= startOfDay && pickupDate <= endOfDay;
+        });
+
+        setPickups(todayPickups);
       } catch (error) {
-        console.error('Error fetching pickups:', error);
+        console.error('Fetch error:', error);
+        setPickups([]);
       } finally {
         setLoading(false);
       }
@@ -51,80 +67,84 @@ const DriverDashboard = () => {
     fetchDriverPickups();
   }, [navigate]);
 
-  const handleConfirmPickup = async (data) => {
-    const token = localStorage.getItem('token');
+  const updateLocation = async () => {
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/pickups/${currentPickup._id}/confirm`,
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          timeout: 10000,
+        });
+      });
+
+      const { latitude: lat, longitude: lng } = position.coords;
+
+      await axios.put(
+        'http://localhost:5000/api/drivers/update-location',
+        { lat, lng },
         {
-          method: 'PUT',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(data),
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          }
         }
       );
 
-      if (response.status === 401) {
+      setCurrentLocation({ lat, lng });
+    } catch (error) {
+      if (error.response?.status === 401) {
         localStorage.removeItem('token');
         navigate('/login');
-        return;
       }
+      setError(error.response?.data?.error || 'Location update failed');
+    }
+  };
 
-      if (!response.ok) {
-        throw new Error('Failed to confirm pickup');
-      }
+  const handleConfirmPickup = async (data) => {
+    try {
+      const formData = new FormData();
+      formData.append('image', data.image); // Append the image file
+      formData.append('weight', data.weight);
+      formData.append('amount', data.amount);
 
-      const updatedPickup = await response.json();
-      setPickups(prev =>
-        prev.map(pickup => pickup._id === updatedPickup._id ? updatedPickup : pickup)
-      );
-    } catch (error) {
-      console.error('Error confirming pickup:', error);
+      await axios.put(`http://localhost:5000/api/pickups/${currentPickup._id}/confirm`, formData, {
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          Authorization: `Bearer ${localStorage.getItem('token')}` 
+        }
+      });
+
+      const response = await axios.get('http://localhost:5000/api/pickups/me', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setPickups(response.data);
+      setShowModal(false);
+      setImage(null); // Reset image after confirmation
+    } catch (err) {
+      console.error('Confirmation error:', err);
+      setError('Failed to confirm pickup. Please try again.');
     }
   };
 
   const handleCancelPickup = async (reason) => {
-    const token = localStorage.getItem('token');
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/pickups/${currentPickup._id}/cancel`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ reason }),
-        }
-      );
-
-      if (response.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/login');
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error('Failed to cancel pickup');
-      }
-
-      const updatedPickup = await response.json();
-      setPickups(prev =>
-        prev.map(pickup => pickup._id === updatedPickup._id ? updatedPickup : pickup)
-      );
-    } catch (error) {
-      console.error('Error canceling pickup:', error);
+      await axios.put(`http://localhost:5000/api/pickups/${currentPickup._id}/cancel`, { reason }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const response = await axios.get('http://localhost:5000/api/pickups/me', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setPickups(response.data);
+      setShowModal(false);
+    } catch (err) {
+      console.error('Cancellation error:', err);
+      setError('Failed to cancel pickup. Please try again.');
     }
   };
 
   if (loading) {
     return (
       <div className="d-flex justify-content-center mt-5">
-        <div className="spinner-border text-primary" role="status">
+        <Spinner animation="border" variant="primary" role="status">
           <span className="visually-hidden">Loading...</span>
-        </div>
+        </Spinner>
       </div>
     );
   }
@@ -135,48 +155,62 @@ const DriverDashboard = () => {
       <main className="flex-grow-1 container py-4">
         <h1 className="text-center text-primary fw-bold mb-4">Driver Dashboard</h1>
         
-        <div className="mb-5">
-          <MapComponent location={location} />
+        {error && <Alert variant="danger" className="mb-4">{error}</Alert>}
+
+        <div className="mb-4">
+          <Button onClick={updateLocation} variant="primary" className="mb-3" type="button">
+            Update My Location
+          </Button>
+
+          {currentLocation && (
+            <MapComponent 
+              driverLocation={currentLocation} 
+              pickupLocations={pickups.map(p => ({
+                lat: p.location?.coordinates[1] || 0,
+                lng: p.location?.coordinates[0] || 0
+              }))} 
+            />
+          )}
         </div>
 
         <div className="text-center mt-4">
           <PDFDownloadLink
-            document={<PickupListPDF pickups={pickups} />}
-            fileName="assigned_pickups.pdf"
+            document={<DriverPickupListPDF pickups={pickups} />}
+            fileName="today_pickups.pdf"
           >
             {({ loading }) => (
-              <button className="btn btn-danger px-4 py-2">
-                {loading ? 'Generating PDF...' : "Download Pickup List"}
-              </button>
+              <Button variant="danger" className="px-4 py-2">
+                {loading ? 'Generating PDF...' : 'Download Today\'s Pickup List'}
+              </Button>
             )}
           </PDFDownloadLink>
         </div>
 
         <div className="mt-4">
           {pickups.length === 0 ? (
-            <p className="text-center">
-              {new Date().getHours() < 18 
-                ? "No pickups assigned to you today"
-                : "No upcoming pickups scheduled"}
-            </p>
+            <Alert variant="info" className="text-center">
+              No pickups assigned to you today.
+            </Alert>
           ) : (
-            pickups.map((pickup) => (
-              <div key={pickup._id} className="card mb-3 shadow-sm">
-                <div className="card-body d-flex justify-content-between align-items-center">
+            pickups.map(pickup => (
+              <Card key={pickup._id} className="mb-3 shadow-sm rounded-lg">
+                <Card.Body className="d-flex justify-content-between align-items-center">
                   <div>
-                    <h5 className="card-title">{pickup.user?.name || 'Customer'}</h5>
-                    <p className="card-text mb-0">{pickup.address}</p>
+                    <Card.Title>{pickup.user?.name || 'Customer'}</Card.Title>
+                    <Card.Text className="mb-0">{pickup.address}</Card.Text>
                     <small className="text-muted">
                       Scheduled: {new Date(pickup.scheduledTime).toLocaleString()}
                     </small>
-                    <br />
-                    <small className={`badge ${pickup.status === 'assigned' ? 'bg-warning' : 'bg-success'}`}>
-                      {pickup.status}
-                    </small>
+                    <div className="mt-2">
+                      <span className={`badge ${pickup.status === 'assigned' ? 'bg-warning' : 'bg-success'}`}>
+                        {pickup.status}
+                      </span>
+                    </div>
                   </div>
                   <div>
-                    <button 
-                      className="btn btn-success me-2"
+                    <Button 
+                      variant="success" 
+                      className="me-2"
                       onClick={() => {
                         setCurrentPickup(pickup);
                         setActionMode('confirm');
@@ -185,9 +219,9 @@ const DriverDashboard = () => {
                       disabled={pickup.status !== 'assigned'}
                     >
                       ✓ Confirm
-                    </button>
-                    <button
-                      className="btn btn-danger"
+                    </Button>
+                    <Button
+                      variant="danger"
                       onClick={() => {
                         setCurrentPickup(pickup);
                         setActionMode('cancel');
@@ -196,21 +230,24 @@ const DriverDashboard = () => {
                       disabled={pickup.status !== 'assigned'}
                     >
                       ✗ Cancel
-                    </button>
+                    </Button>
                   </div>
-                </div>
-              </div>
+                </Card.Body>
+              </Card>
             ))
           )}
         </div>
       </main>
       <Footer />
+      
       <PickupConfirmationModal
         show={showModal}
         onConfirm={handleConfirmPickup}
         onCancel={handleCancelPickup}
         onClose={() => setShowModal(false)}
         mode={actionMode}
+        image={image}
+        setImage={setImage}
       />
     </div>
   );

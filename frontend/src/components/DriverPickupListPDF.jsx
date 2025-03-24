@@ -51,7 +51,7 @@ const DriverPickupListPDF = ({ pickups }) => (
           <Text style={[styles.tableCell, { flex: 2 }]}>Pickup ID</Text>
           <Text style={[styles.tableCell, { flex: 1.5 }]}>Contact Number</Text>
           <Text style={styles.tableCell}>Name</Text>
-          <Text style={styles.tableCell}>address</Text>
+          <Text style={styles.tableCell}>Address</Text>
           <Text style={styles.tableCell}>Estimated Amount</Text>
           <Text style={styles.tableCellLast}>Choose Item</Text>
         </View>
@@ -60,7 +60,7 @@ const DriverPickupListPDF = ({ pickups }) => (
           <View style={styles.tableRow} key={pickup._id}>
             <Text style={[styles.tableCell, { flex: 2 }]}>{pickup._id}</Text>
             <Text style={[styles.tableCell, { flex: 1.5 }]}>{pickup.contactNumber}</Text>
-            <Text style={styles.tableCell}>{pickup.user.name}</Text>
+            <Text style={styles.tableCell}>{pickup.user?.name || 'Customer'}</Text>
             <Text style={styles.tableCell}>{pickup.address}</Text>
             <Text style={styles.tableCell}>{pickup.estimatedAmount}</Text>
             <Text style={styles.tableCellLast}>{pickup.chooseItem}</Text>
@@ -70,9 +70,5 @@ const DriverPickupListPDF = ({ pickups }) => (
     </Page>
   </Document>
 );
-
-
-
-
 
 export default DriverPickupListPDF;

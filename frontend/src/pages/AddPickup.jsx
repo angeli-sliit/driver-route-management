@@ -4,6 +4,8 @@ import 'leaflet/dist/leaflet.css';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { Modal, Button, Form } from 'react-bootstrap';
+import Navbar from '../components/Navbar';
+import Footer from '../components/Footer';
 
 const LocationMarker = ({ setPosition }) => {
   useMapEvents({
@@ -29,190 +31,184 @@ const AddPickup = () => {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
 
-    // Validate all required fields
     if (!position) return alert('Please select location on map');
-    if (
-      !formData.contactNumber ||
-      !formData.estimatedAmount ||
-      !formData.chooseItem ||
-      !formData.pickupType ||
-      !formData.scheduledTime ||
-      !formData.address
-    ) {
-      return alert('Please fill out all required fields.');
-    }
+    const fieldsFilled = Object.values(formData).every(val => val !== '');
+    if (!fieldsFilled) return alert('Please fill out all required fields.');
 
-    setShowConfirmation(true); // Show confirmation popup
+    setShowConfirmation(true);
   };
 
   const handleConfirmation = async () => {
-    if (!termsAccepted) {
-      alert('Please accept the terms and conditions.');
-      return;
-    }
-  
-    if (!position) {
-      alert('Please select a location on the map.');
-      return;
-    }
-  
+    if (!termsAccepted) return alert('Please accept the terms and conditions.');
+    if (!position) return alert('Please select a location on the map.');
+
     try {
       const formPayload = {
         ...formData,
         location: {
-          type: 'Point', // Required
-          coordinates: [position.lng, position.lat], // [longitude, latitude]
+          type: 'Point',
+          coordinates: [position.lng, position.lat],
         },
       };
-  
+
       const token = localStorage.getItem('token');
       const response = await axios.post('http://localhost:5000/api/pickups/add', formPayload, {
         headers: { Authorization: `Bearer ${token}` },
       });
-  
-      if (response.data.error) {
-        alert(response.data.error);
-        return;
-      }
-  
-      const pickupId = response.data._id;
-      navigate(`/pickup-details/${pickupId}`); // Navigate to PickupDetails page
+
+      if (response.data.error) return alert(response.data.error);
+
+      navigate(`/pickup-details/${response.data._id}`);
     } catch (err) {
       console.error('Error scheduling pickup:', err);
-      if (err.response) {
-        alert(err.response.data.error || 'Failed to schedule pickup. Please try again.');
-      } else {
-        alert('Network error. Please check your connection.');
-      }
+      const msg = err.response?.data?.error || 'Network error. Please try again.';
+      alert(msg);
     }
   };
 
   const handleToBeCollectedClick = () => {
-    navigate('/to-be-collected'); // Adjust the route as needed
+    navigate('/to-be-collected');
   };
 
   return (
-    <div className="container mt-4">
-      <h2>Schedule New Pickup</h2>
-      <Button variant="primary" onClick={handleToBeCollectedClick}>
-        To Be Collected
-      </Button>
-      <form onSubmit={handleSubmit}>
-        <div className="mb-3">
-          <label>Contact Number</label>
-          <input
-            type="text"
-            className="form-control"
-            value={formData.contactNumber}
-            onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
-            required
-          />
-        </div>
+    <>
+    <div className="container mt-5" style={{ paddingTop: '50px' }}>
+      <Navbar />
 
-        <div className="mb-3">
-          <label>Estimated Wight</label>
-          <input
-            type="number"
-            className="form-control"
-            value={formData.estimatedAmount}
-            onChange={(e) => setFormData({ ...formData, estimatedAmount: e.target.value })}
-            required
-          />
-        </div>
+      <div className="d-flex justify-content-between align-items-center mb-4" >
+        <h2 className="fw-bold">Schedule New Pickup</h2>
+        <Button variant="primary" onClick={handleToBeCollectedClick}>
+          To Be Collected
+        </Button>
+      </div>
 
-        <div className="mb-3">
-          <label>Choose Item</label>
-          <select
-            className="form-select"
-            value={formData.chooseItem}
-            onChange={(e) => setFormData({ ...formData, chooseItem: e.target.value })}
-            required
-          >
-            <option value="">Select Item</option>
-            <option value="electronics">Electronics</option>
-            <option value="furniture">Furniture</option>
-            <option value="documents">Documents</option>
-          </select>
-        </div>
+      <div className="p-4 bg-light rounded shadow-sm mb-4">
+        <Form onSubmit={handleSubmit}>
+          <div className="row">
+            <div className="col-md-6">
+              <Form.Group className="mb-3">
+                <Form.Label>Contact Number</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={formData.contactNumber}
+                  onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
+                  required
+                />
+              </Form.Group>
+            </div>
 
-        <div className="mb-3">
-          <label>Pickup Type</label>
-          <select
-            className="form-select"
-            value={formData.pickupType}
-            onChange={(e) => setFormData({ ...formData, pickupType: e.target.value })}
-            required
-          >
-            <option value="general">General</option>
-            <option value="urgent">Urgent</option>
-            <option value="fragile">Fragile</option>
-          </select>
-        </div>
-
-        <div className="mb-3">
-          <label>Scheduled Date</label>
-          <input
-            type="date" // Only allow date selection
-            className="form-control"
-            value={formData.scheduledTime.split('T')[0]} // Extract only the date part
-            onChange={(e) => {
-              const selectedDate = e.target.value; // Format: YYYY-MM-DD
-              setFormData({ ...formData, scheduledTime: selectedDate }); // Send only the date
-            }}
-            required
-          />
-        </div>
-
-        <div className="mb-3">
-          <label>Address</label>
-          <input
-            type="text"
-            className="form-control"
-            value={formData.address}
-            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-            required
-          />
-        </div>
-
-        <div className="mb-3">
-          <label>Pickup Location</label>
-          <div style={{ height: '300px', width: '100%', marginBottom: '20px' }}>
-            <MapContainer center={[6.9271, 79.8612]} zoom={13} style={{ height: '100%', width: '100%' }}>
-              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              <LocationMarker setPosition={setPosition} />
-              {position && <Marker position={position} />}
-            </MapContainer>
+            <div className="col-md-6">
+              <Form.Group className="mb-3">
+                <Form.Label>Estimated Weight (kg)</Form.Label>
+                <Form.Control
+                  type="number"
+                  value={formData.estimatedAmount}
+                  onChange={(e) => setFormData({ ...formData, estimatedAmount: e.target.value })}
+                  required
+                />
+              </Form.Group>
+            </div>
           </div>
-        </div>
 
-        <button type="submit" className="btn btn-primary">Schedule Pickup</button>
-      </form>
+          <div className="row">
+            <div className="col-md-6">
+              <Form.Group className="mb-3">
+                <Form.Label>Choose Item</Form.Label>
+                <Form.Select
+                  value={formData.chooseItem}
+                  onChange={(e) => setFormData({ ...formData, chooseItem: e.target.value })}
+                  required
+                >
+                  <option value="">Select Item</option>
+                  <option value="electronics">Electronics</option>
+                  <option value="furniture">Furniture</option>
+                  <option value="documents">Documents</option>
+                </Form.Select>
+              </Form.Group>
+            </div>
 
-      {/* Confirmation Popup */}
-      <Modal show={showConfirmation} onHide={() => setShowConfirmation(false)}>
+            <div className="col-md-6">
+              <Form.Group className="mb-3">
+                <Form.Label>Pickup Type</Form.Label>
+                <Form.Select
+                  value={formData.pickupType}
+                  onChange={(e) => setFormData({ ...formData, pickupType: e.target.value })}
+                  required
+                >
+                  <option value="general">General</option>
+                  <option value="urgent">Urgent</option>
+                  <option value="fragile">Fragile</option>
+                </Form.Select>
+              </Form.Group>
+            </div>
+          </div>
+
+          <div className="row">
+            <div className="col-md-6">
+              <Form.Group className="mb-3">
+                <Form.Label>Scheduled Date</Form.Label>
+                <Form.Control
+                  type="date"
+                  value={formData.scheduledTime}
+                  onChange={(e) => setFormData({ ...formData, scheduledTime: e.target.value })}
+                  required
+                />
+              </Form.Group>
+            </div>
+
+            <div className="col-md-6">
+              <Form.Group className="mb-3">
+                <Form.Label>Address</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  required
+                />
+              </Form.Group>
+            </div>
+          </div>
+
+          <Form.Group className="mb-4">
+            <Form.Label>Select Pickup Location</Form.Label>
+            <div className="border rounded" style={{ height: '300px' }}>
+              <MapContainer center={[6.9271, 79.8612]} zoom={13} style={{ height: '100%', width: '100%' }}>
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                <LocationMarker setPosition={setPosition} />
+                {position && <Marker position={position} />}
+              </MapContainer>
+            </div>
+          </Form.Group>
+
+          <Button type="submit" variant="success" className="w-100">
+            Schedule Pickup
+          </Button>
+        </Form>
+      </div>
+
+      {/* Confirmation Modal */}
+      <Modal show={showConfirmation} onHide={() => setShowConfirmation(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title>Confirm Pickup</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <p>Are you sure you want to confirm this pickup?</p>
-          <Form.Group>
-            <Form.Check
-              type="checkbox"
-              label={
-                <>
-                  I agree to the{' '}
-                  <a href="/terms-and-conditions" target="_blank" rel="noopener noreferrer">
-                    terms and conditions
-                  </a>
-                </>
-              }
-              checked={termsAccepted}
-              onChange={(e) => setTermsAccepted(e.target.checked)}
-            />
-          </Form.Group>
+          <Form.Check
+            type="checkbox"
+            label={
+              <>
+                I agree to the{' '}
+                <a href="/terms-and-conditions" target="_blank" rel="noopener noreferrer">
+                  terms and conditions
+                </a>
+              </>
+            }
+            checked={termsAccepted}
+            onChange={(e) => setTermsAccepted(e.target.checked)}
+          />
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowConfirmation(false)}>
@@ -223,7 +219,11 @@ const AddPickup = () => {
           </Button>
         </Modal.Footer>
       </Modal>
+
+      
     </div>
+    <Footer />
+    </>
   );
 };
 

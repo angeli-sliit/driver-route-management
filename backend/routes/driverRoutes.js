@@ -8,9 +8,11 @@ import {
   deleteDriver,
   updateDriverLocation,
   uploadProfilePicture,
-  getCurrentDriver 
+  getCurrentDriver ,
+  updateDriverAvailability
+  
 } from '../controllers/driverController.js';
-import { protectDriver } from '../middleware/authMiddleware.js';
+import { protectDriver, protectAdmin } from '../middleware/authMiddleware.js';
 
 
 
@@ -18,20 +20,26 @@ import { protectDriver } from '../middleware/authMiddleware.js';
 const router = express.Router();
 
 // Public routes
-router.post('/register', registerDriver);
 router.post('/login', loginDriver);
+router.post('/register', protectAdmin, registerDriver);
+router.put('/:id', protectAdmin, updateDriver);
+router.get('/', protectAdmin, getDrivers);
 
 router.get('/me', protectDriver, getCurrentDriver); // New route to get current driver's details
-router.get('/', protectDriver, getDrivers);
-router.get('/:id', protectDriver, getDriverById);
+router.put('/update-location', protectDriver, updateDriverLocation);
+router.post('/upload-profile-picture', protectDriver, uploadProfilePicture);
 
-router.put('/:id', protectDriver, updateDriver);
+router.get('/:id', protectDriver, getDriverById);
 router.delete('/:id', protectDriver, deleteDriver);
+router.put('/:id/availability', protectAdmin, );
+router.put('/:id/availability', protectAdmin, updateDriverAvailability)
+// router.put('/:id', protectDriver, updateDriver);
+
 
 // Add the update-location route
-router.post('/update-location', protectDriver, updateDriverLocation);
+
 
 // Add the upload-profile-picture route
-router.post('/upload-profile-picture', protectDriver, uploadProfilePicture);
+
 
 export default router;

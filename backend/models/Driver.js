@@ -26,12 +26,18 @@ const driverSchema = new mongoose.Schema({
     default: 'Active' 
   },
   joinedDate: { type: Date, required: true },
+
   status: {  
+  type: String, 
+  enum: ['available', 'assigned', 'unavailable', 'busy'],
+  default: 'available'
+},
+
+  vehicleType: { 
     type: String, 
-    enum: ['available', 'on-route', 'unavailable', 'busy'],
-    default: 'available'
+    enum: ['Toyota Dyna', 'Isuzu Elf', 'Mitsubishi Canter', 'Tata LPT 709/1109'],
+    required: true
   },
-  vehicleType: { type: String },
   vehicleNumber: { type: String, unique: true },
   currentLocation: {
     type: {

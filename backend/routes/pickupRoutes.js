@@ -13,7 +13,8 @@ import {
   optimizeRoute,
   updatePickupDetails,
   deletePickup,
-  optimizedAssignment
+  optimizedAssignment,
+  assignDailyPickups
 } from '../controllers/pickupController.js';
 
 import { protectUser, protectDriver, protectAny, protectAdmin } from '../middleware/authMiddleware.js';
@@ -37,12 +38,13 @@ const upload = multer({ storage: storage });
 // Protected routes
 router.post('/add', protectAny, upload.single('itemImage'), schedulePickup);
 router.post('/assign',  protectAdmin,assignPickup);
+router.post('/assignDailyPickups',  protectAdmin,assignDailyPickups);
 router.post('/update-status', protectDriver, updatePickupStatus);
 router.get('/me', protectDriver, listPickups);
 router.post('/optimize-route', protectDriver, optimizeRoute);
 router.get('/user/scheduled-pickups', protectUser, getUserScheduledPickups);
 router.get('/nowShedule/:id', protectAny, getPickupById);
-router.get('/', protectDriver, listPickups);
+//router.get('/', protectDriver, listPickups);
 router.put('/pickup/:id', protectUser, updatePickupStatus);
 router.get('/all', protectAdmin, getAllPickups);
 router.get('/generate-pdf', protectDriver, generatePickupPDF);

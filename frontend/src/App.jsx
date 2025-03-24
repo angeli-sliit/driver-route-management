@@ -62,6 +62,12 @@ function App() {
           </ProtectedRoute>
         } />
 
+        <Route path="/to-be-collected" element={
+          <ProtectedRoute>
+            <ToBeCollected />
+          </ProtectedRoute>
+        } />
+
         {/* Default redirect for unmatched routes */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
