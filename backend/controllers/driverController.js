@@ -1,54 +1,96 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import Driver from '../models/Driver.js';
+import multer from 'multer';
+import path from 'path';
 
 // Register a new driver
 export const registerDriver = async (req, res) => {
   try {
-    const {
-      firstName,
-      middleName,
-      lastName,
-      email,
-      password,
-      birthday,
-      nationality,
-      employeeId,
-      employeeType,
-      nic,
-      employeeStatus,
-      joinedDate,
-    } = req.body;
+    const { firstName, lastName, email, password, vehicleType, employeeId, nic, 
+            birthday, nationality, employeeType, joinedDate, vehicleNumber } = req.body;
 
-    const existingDriver = await Driver.findOne({ email });
+    // Validate required fields
+    const requiredFields = ['firstName', 'lastName', 'email', 'password', 'vehicleType', 
+                           'employeeId', 'nic', 'birthday', 'nationality', 
+                           'employeeType', 'joinedDate'];
+    
+    const missingFields = requiredFields.filter(field => !req.body[field]);
+    if (missingFields.length > 0) {
+      return res.status(400).json({ 
+        error: 'Missing required fields',
+        missingFields 
+      });
+    }
+
+    // Check for duplicates
+    const existingDriver = await Driver.findOne({ 
+      $or: [
+        { email },
+        { employeeId },
+        { nic },
+        { vehicleNumber }
+      ]
+    });
+    
     if (existingDriver) {
-      return res.status(400).json({ error: 'Driver already exists' });
+      let conflictField = '';
+      if (existingDriver.email === email) conflictField = 'email';
+      else if (existingDriver.employeeId === employeeId) conflictField = 'employee ID';
+      else if (existingDriver.nic === nic) conflictField = 'NIC';
+      else if (existingDriver.vehicleNumber === vehicleNumber) conflictField = 'vehicle number';
+      
+      return res.status(400).json({ 
+        error: `Driver with this ${conflictField} already exists` 
+      });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const driver = new Driver({
       firstName,
-      middleName,
       lastName,
       email,
       password: hashedPassword,
-      birthday,
-      nationality,
+      vehicleType,
       employeeId,
-      employeeType,
       nic,
-      employeeStatus,
-      joinedDate,
+      birthday: new Date(birthday),
+      nationality,
+      employeeType,
+      joinedDate: new Date(joinedDate),
+      vehicleNumber,
+      status: 'available',
     });
 
     await driver.save();
 
-    const token = jwt.sign({ id: driver._id }, process.env.JWT_SECRET, {
-      expiresIn: '1h',
+    res.status(201).json({ 
+      driver: {
+        _id: driver._id,
+        firstName: driver.firstName,
+        lastName: driver.lastName,
+        email: driver.email,
+        employeeId: driver.employeeId,
+        vehicleType: driver.vehicleType,
+        status: driver.status
+      }
     });
+  } catch (err) {
+    console.error('Error in registerDriver:', err);
+    res.status(500).json({ 
+      error: 'Server error',
+      details: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
+};
 
-    res.status(201).json({ driver, token });
+// Get all drivers
+export const getDrivers = async (req, res) => {
+  try {
+    const drivers = await Driver.find().select('-password');
+    res.status(200).json(drivers);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -86,18 +128,7 @@ export const loginDriver = async (req, res) => {
   }
 };
 
-
-// Get all drivers
-export const getDrivers = async (req, res) => {
-  try {
-    const drivers = await Driver.find().select('-password');
-    res.status(200).json(drivers);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// controllers/driverController.js
+// Get current driver
 export const getCurrentDriver = async (req, res) => {
   try {
     if (!req.user || !req.user.id) {
@@ -153,16 +184,50 @@ export const updateDriver = async (req, res) => {
 export const updateDriverLocation = async (req, res) => {
   try {
     const { lat, lng } = req.body;
+
+    if (!lat || !lng) {
+      return res.status(400).json({
+        status: 'error',
+        error: 'Latitude and longitude are required.'
+      });
+    }
+
     const driver = await Driver.findByIdAndUpdate(
-      req.user.id, // Use authenticated driver's ID
-      { currentLocation: { type: 'Point', coordinates: [lng, lat] } },
-      { new: true }
+      req.user.id,
+      {
+        currentLocation: {
+          type: 'Point',
+          coordinates: [parseFloat(lng), parseFloat(lat)]
+        },
+        lastUpdated: new Date()
+      },
+      { new: true, runValidators: true }
     );
-    res.status(200).json(driver);
+
+    if (!driver) {
+      return res.status(404).json({
+        status: 'error',
+        error: 'Driver not found.'
+      });
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        id: driver._id,
+        location: driver.currentLocation,
+        lastUpdated: driver.lastUpdated
+      }
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Location Update Error:', err);
+    res.status(500).json({
+      status: 'error',
+      error: 'Failed to update location. Please try again.'
+    });
   }
 };
+
 
 // Delete a driver
 export const deleteDriver = async (req, res) => {
@@ -179,10 +244,6 @@ export const deleteDriver = async (req, res) => {
 };
 
 // Upload Profile Picture
-import multer from 'multer';
-import path from 'path';
-
-// Multer configuration
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'uploads/');
@@ -192,26 +253,41 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage });
+export const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'), false);
+    }
+  }
+});
 
+// Upload profile picture handler
 export const uploadProfilePicture = async (req, res) => {
   try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
     const driver = await Driver.findByIdAndUpdate(
       req.user.id,
-      { profilePicture: req.file.path },
+      { profilePicture: req.file.path.replace(/\\/g, '/') },
       { new: true }
     ).select('-password');
 
-    if (!driver) {
-      return res.status(404).json({ error: 'Driver not found' });
-    }
-
-    res.status(200).json(driver);
+    res.status(200).json({
+      profilePicture: driver.profilePicture,
+      message: 'Profile picture updated successfully'
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
-// driverController.js
+
+// Mark attendance
 export const markAttendance = async (req, res) => {
   try {
     const { date, driverId, status } = req.body;
@@ -229,3 +305,74 @@ export const markAttendance = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+// Get available drivers
+export const getAvailableDrivers = async (req, res) => {
+  try {
+    const drivers = await Driver.find({ 
+      status: 'available',
+      'attendance.date': { $gte: new Date().setHours(0,0,0,0) }
+    });
+    res.status(200).json(drivers);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Update driver availability
+// export const updateDriverAvailability = async (req, res) => {
+//   const { id } = req.params;
+//   const { status } = req.body;
+
+//   try {
+//     const driver = await Driver.findByIdAndUpdate(id, { status }, { new: true });
+//     if (!driver) {
+//       return res.status(404).json({ error: 'Driver not found' });
+//     }
+//     res.json(driver);
+//   } catch (error) {
+//     res.status(400).json({ error: error.message });
+//   }
+// };
+
+
+
+// Update driver availability
+export const updateDriverAvailability = async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  try {
+    // Get current date (just the date part, no time)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const driver = await Driver.findById(id);
+    if (!driver) {
+      return res.status(404).json({ error: 'Driver not found' });
+    }
+
+    // Check if there's already an entry for today
+    const existingEntryIndex = driver.attendance.findIndex(entry => 
+      new Date(entry.date).setHours(0, 0, 0, 0) === today.getTime()
+    );
+
+    if (existingEntryIndex >= 0) {
+      // Update existing entry
+      driver.attendance[existingEntryIndex].status = status;
+    } else {
+      // Add new entry
+      driver.attendance.push({ date: today, status });
+    }
+
+    // Update the driver's overall status
+    driver.status = status;
+
+    await driver.save();
+
+    res.json(driver);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+

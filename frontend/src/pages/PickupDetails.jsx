@@ -184,7 +184,7 @@ const PickupDetails = () => {
             <strong>Item:</strong> {pickup.chooseItem}
           </Card.Text>
           <Card.Text>
-            <strong>Estimated Amount:</strong> LKR {pickup.estimatedAmount}
+            <strong>Estimated Weight:</strong> KG {pickup.estimatedAmount}
           </Card.Text>
           <Card.Text>
             <strong>Pickup Type:</strong> {pickup.pickupType}

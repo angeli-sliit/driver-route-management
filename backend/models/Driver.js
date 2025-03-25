@@ -1,6 +1,13 @@
 import mongoose from 'mongoose';
 
 const driverSchema = new mongoose.Schema({
+  routes: [{
+    date: Date,
+    pickups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Pickup' }],
+    totalDistance: Number,
+    fuelCost: Number
+  }],
+  
   firstName: { type: String, required: true },
   middleName: { type: String },
   lastName: { type: String, required: true },
@@ -14,24 +21,31 @@ const driverSchema = new mongoose.Schema({
   birthday: { type: Date, required: true },
   nationality: { type: String, required: true },
   employeeId: { type: String, unique: true, required: true },
+  
   employeeType: { 
     type: String, 
     enum: ['Permanent', 'Contract', 'Trainee'], 
     required: true 
   },
   nic: { type: String, unique: true, required: true },
+  
   employeeStatus: { 
     type: String, 
-    enum: ['Active', 'Inactive', 'On Leave'], 
-    default: 'Active' 
+    enum: ['assigned', 'notAssigned'],  
   },
+
   joinedDate: { type: Date, required: true },
+
   status: {  
     type: String, 
-    enum: ['available', 'on-route', 'unavailable', 'busy'],
-    default: 'available'
+    enum: ['available', 'unavailable'],
+    default: 'unavailable'
   },
-  vehicleType: { type: String },
+  vehicleType: { 
+    type: String, 
+    enum: ['Toyota Dyna', 'Isuzu Elf', 'Mitsubishi Canter', 'Tata LPT 709/1109'],
+    required: true
+  },
   vehicleNumber: { type: String, unique: true },
   currentLocation: {
     type: {
@@ -53,8 +67,21 @@ const driverSchema = new mongoose.Schema({
       default: [79.8612, 6.9271] // Default to Colombo coordinates
     }
   },
-  profilePicture: { type: String }
-}, { timestamps: true });
+  profilePicture: { type: String },
+  
+  attendance: [{
+    date: { 
+      type: Date, 
+      required: true,
+      default: Date.now
+    },
+    status: { 
+      type: String, 
+      enum: ['available', 'unavailable'],
+      required: true
+    }
+  }]
+}, { timestamps: true }); // Moved timestamps to the correct position
 
 driverSchema.index({ currentLocation: '2dsphere' });
 

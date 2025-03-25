@@ -1,0 +1,29 @@
+{
+  "name": "drivern-route-management",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd backend && npm run dev",
+    "client": "cd frontend && npm run dev",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "concurrently": "^7.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/angeli-sliit/driver-route-management.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/angeli-sliit/driver-route-management/issues"
+  },
+  "homepage": "https://github.com/angeli-sliit/driver-route-management#readme",
+  "dependencies": {
+    "@emailjs/browser": "^4.4.1",
+    "dotenv": "^16.4.7"
+  }
+}

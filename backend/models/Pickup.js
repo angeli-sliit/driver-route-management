@@ -14,7 +14,12 @@ const pickupSchema = new mongoose.Schema({
   scheduledTime: { type: Date, required: true },
   status: { type: String, enum: ['pending', 'assigned', 'completed', 'cancelled'], default: 'pending' },
   driver: { type: mongoose.Schema.Types.ObjectId, ref: 'Driver' },
+  image: { type: String }, // Stores file path/URL
+  weight: { type: Number ,min: [1, 'Weight must be at least 1kg'],max: [10000, 'Weight cannot exceed 10,000kg']}, // Actual collected weight
+  amount: { type: Number, min: [0, 'Amount cannot be negative'] }, // Calculated payment amount
+  cancellationReason: { type: String } // For cancelled pickups
 }, { timestamps: true });
+
 
 pickupSchema.index({ location: '2dsphere' });
 

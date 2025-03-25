@@ -4,50 +4,55 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import connectDB from './config/db.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Import routes
 import driverRoutes from './routes/driverRoutes.js';
 import pickupRoutes from './routes/pickupRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import fuelPriceRoutes from './routes/fuelPriceRoutes.js';
-import { protectUser } from './middleware/authMiddleware.js';
+import routeRoutes from './routes/routeRoutes.js';
 
+// Config
 dotenv.config();
-connectDB();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
+// Create Express app
 const app = express();
-const httpServer = createServer(app); 
-const io = new Server(httpServer, {   
-  cors: {
-    origin: 'http://localhost:5173',
-    methods: ['GET', 'POST']
-  }
-});
+const httpServer = createServer(app);
 
 // Middleware
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cors());
-app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Routes
+
 app.use('/api/drivers', driverRoutes);
 app.use('/api/pickups', pickupRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admins', adminRoutes);
 app.use('/api/fuel-price', fuelPriceRoutes);
+app.use('/api/routes', routeRoutes);
 
-// Protected route example
-app.get('/api/protected', protectUser, (req, res) => {
-  res.json({ message: 'You are authenticated', user: req.user });
+
+const io = new Server(httpServer, {
+  cors: { origin: 'http://localhost:5173' }
 });
 
-// Socket.IO Connection Handler
 io.on('connection', (socket) => {
-  console.log('Client connected');
-  
-  socket.on('disconnect', () => {
-    console.log('Client disconnected');
-  });
+  console.log('Client connected:', socket.id);
+  socket.on('disconnect', () => console.log('Client disconnected:', socket.id));
 });
+
+
+// Database connection
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
 // Start server
 const PORT = process.env.PORT || 5000;

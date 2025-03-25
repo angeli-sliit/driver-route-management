@@ -1,6 +1,5 @@
-// frontend/src/components/Navbar.jsx
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import logo from '../assets/logo.png';
 
 const Navbar = () => {
@@ -14,7 +13,7 @@ const Navbar = () => {
   };
 
   return (
-    <nav style={{ backgroundColor: '#144A20' }} className="navbar navbar-expand-md navbar-light">
+    <nav className="navbar navbar-expand-md navbar-light fixed-top" style={{ backgroundColor: '#144A20', zIndex: '1000' }}>
       <div className="container">
         <img src={logo} alt="Logo" style={{ width: '80px', height: '40px', marginRight: '20px' }} />
         

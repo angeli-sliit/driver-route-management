@@ -1,26 +1,25 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { useForm } from 'react-hook-form';
 
 const Login = () => {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    role: 'user' // Default role is 'user'
-  });
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm();
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const onSubmit = async (data) => {
     setError('');
     setIsSubmitting(true);
 
     try {
-      // Determine the login endpoint based on the selected role
       let loginEndpoint;
-      switch (formData.role) {
+      switch (data.role) {
         case 'user':
           loginEndpoint = 'http://localhost:5000/api/users/login';
           break;
@@ -35,141 +34,129 @@ const Login = () => {
       }
 
       const response = await axios.post(loginEndpoint, {
-        email: formData.email,
-        password: formData.password
+        email: data.email,
+        password: data.password,
       });
 
-      // Store authentication data in local storage
       localStorage.setItem('token', response.data.token);
 
-      switch (formData.role) {
+      switch (data.role) {
         case 'user':
           localStorage.setItem('userData', JSON.stringify({
             id: response.data._id,
-            name: response.data.name
+            name: response.data.name,
           }));
-          navigate('/add-pickup'); // Redirect to user dashboard
+          navigate('/add-pickup');
           break;
         case 'driver':
           localStorage.setItem('driverData', JSON.stringify({
             id: response.data._id,
-            name: `${response.data.firstName} ${response.data.lastName}`
+            name: `${response.data.firstName} ${response.data.lastName}`,
           }));
-          navigate('/home'); // Redirect to driver dashboard
+          navigate('/home');
           break;
         case 'admin':
           localStorage.setItem('adminData', JSON.stringify({
             id: response.data._id,
-            name: response.data.name
+            name: response.data.name,
           }));
-          navigate('/admin-dashboard'); // Redirect to admin dashboard
+          navigate('/admin-dashboard');
           break;
         default:
           throw new Error('Invalid role selected');
       }
     } catch (err) {
-      const errorMessage = err.response?.data?.error || 
-                          err.message || 
-                          'Login failed. Please try again.';
+      const errorMessage = err.response?.data?.error ||
+        err.message ||
+        'Login failed. Please try again.';
       setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleInputChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
-  };
-
   return (
-    <div className="container mt-5">
-      <div className="row justify-content-center">
-        <div className="col-md-6 col-lg-4">
-          <div className="card shadow-lg">
-            <div className="card-body p-4">
-              <h2 className="text-center mb-4 fw-bold text-primary">Login</h2>
-              {error && <div className="alert alert-danger">{error}</div>}
-              
-              <form onSubmit={handleSubmit}>
-                {/* Role Selection */}
-                <div className="mb-3">
-                  <label htmlFor="role" className="form-label">Login As</label>
-                  <select
-                    className="form-select"
-                    id="role"
-                    name="role"
-                    value={formData.role}
-                    onChange={handleInputChange}
-                    required
+    <div className="min-vh-100 d-flex align-items-center justify-content-center" style={{ backgroundColor: '#e6f4ea' }}>
+      <div className="container">
+        <div className="row justify-content-center">
+          <div className="col-md-6 col-lg-4">
+            <div className="card shadow-lg rounded-4 border-0">
+              <div className="card-body p-5 bg-white">
+                <h2 className="text-center mb-4 fw-bold text-success">Login</h2>
+                {error && <div className="alert alert-danger">{error}</div>}
+
+                <form onSubmit={handleSubmit(onSubmit)}>
+                  {/* Role Selection */}
+                  <div className="mb-3">
+                    <label htmlFor="role" className="form-label fw-semibold">Login As</label>
+                    <select
+                      className="form-select rounded-3"
+                      id="role"
+                      {...register('role', { required: 'Role is required' })}
+                    >
+                      <option value="user">User</option>
+                      <option value="driver">Driver</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                    {errors.role && <span className="text-danger small">{errors.role.message}</span>}
+                  </div>
+
+                  {/* Email Input */}
+                  <div className="mb-3">
+                    <label htmlFor="email" className="form-label fw-semibold">Email</label>
+                    <input
+                      type="email"
+                      className="form-control rounded-3"
+                      id="email"
+                      {...register('email', { required: 'Email is required' })}
+                    />
+                    {errors.email && <span className="text-danger small">{errors.email.message}</span>}
+                  </div>
+
+                  {/* Password Input */}
+                  <div className="mb-4">
+                    <label htmlFor="password" className="form-label fw-semibold">Password</label>
+                    <input
+                      type="password"
+                      className="form-control rounded-3"
+                      id="password"
+                      {...register('password', { required: 'Password is required' })}
+                    />
+                    {errors.password && <span className="text-danger small">{errors.password.message}</span>}
+                  </div>
+
+                  {/* Submit Button */}
+                  <button
+                    type="submit"
+                    className="btn btn-success w-100 py-2 rounded-3 shadow-sm"
+                    disabled={isSubmitting}
                   >
-                    <option value="user">User</option>
-                    <option value="driver">Driver</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
-
-                {/* Email Input */}
-                <div className="mb-3">
-                  <label htmlFor="email" className="form-label">Email</label>
-                  <input
-                    type="email"
-                    className="form-control"
-                    id="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
-
-                {/* Password Input */}
-                <div className="mb-4">
-                  <label htmlFor="password" className="form-label">Password</label>
-                  <input
-                    type="password"
-                    className="form-control"
-                    id="password"
-                    name="password"
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
-
-                {/* Submit Button */}
-                <button 
-                  type="submit" 
-                  className="btn btn-primary w-100 py-2"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <span className="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-                      Logging in...
-                    </>
-                  ) : 'Login'}
-                </button>
-              </form>
-
-              {/* Register Link */}
-              <div className="mt-3 text-center">
-                <p>
-                  Don't have an account?{' '}
-                  <button 
-                    className="btn btn-link p-0"
-                    onClick={() => navigate('/register')}
-                  >
-                    Register here
+                    {isSubmitting ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2 align-middle" aria-hidden="true"></span>
+                        Logging in...
+                      </>
+                    ) : 'Login'}
                   </button>
-                </p>
+                </form>
+
+                {/* Register Link */}
+                <div className="mt-3 text-center">
+                  <p>
+                    Don't have an account?{' '}
+                    <button
+                      className="btn btn-link p-0 text-success text-decoration-none fw-semibold"
+                      onClick={() => navigate('/register')}
+                    >
+                      Register here
+                    </button>
+                  </p>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </div>  
     </div>
   );
 };

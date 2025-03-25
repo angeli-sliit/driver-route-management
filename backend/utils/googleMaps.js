@@ -2,21 +2,22 @@ import { Client } from '@googlemaps/google-maps-services-js';
 
 const client = new Client({});
 
-const getOptimizedRoute = async (origin, destination, waypoints) => {
+export const getOptimizedRoute = async (origin, destination, waypoints) => {
   try {
     const response = await client.directions({
       params: {
         origin,
         destination,
         waypoints,
+        optimizeWaypoints: true,
+        trafficModel: 'best_guess',
+        departureTime: 'now',
         key: process.env.GOOGLE_MAPS_API_KEY,
       },
     });
-    return response.data.routes[0]; // Return the first optimized route
+    return response.data.routes[0];
   } catch (error) {
-    console.error('Error fetching optimized route:', error);
-    throw new Error('Failed to fetch optimized route');
+    console.error('Error optimizing route:', error);
+    throw new Error('Failed to optimize route');
   }
 };
-
-export { getOptimizedRoute };

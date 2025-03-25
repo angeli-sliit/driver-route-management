@@ -4,11 +4,18 @@ import { MdEmail } from 'react-icons/md';
 import logo from '../assets/logo.png';
 
 const Footer = () => {
+  const footerStyle = {
+    position: 'relative',
+    width: '100%',
+    bottom: 0,
+    backgroundColor: '#144A20', // Setting background color to #144A20
+    zIndex: '1000', // Optional: Only needed if you want to layer it above other content
+  };
+
   return (
-    <footer style={{ backgroundColor: '#144A20' }} className="text-white py-4">
+    <footer style={footerStyle} className="text-white py-4 mt-auto">
       <div className="container">
         <div className="row">
-
           {/* Logo and Social Icons */}
           <div className="col-md-3 mb-4 mb-md-0 d-flex flex-column align-items-start">
             <div className="d-flex align-items-center mb-3">

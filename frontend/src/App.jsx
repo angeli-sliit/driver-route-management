@@ -8,7 +8,8 @@ import Register from './pages/Register';
 import AddPickup from './pages/AddPickup';
 import TermsAndConditions from './pages/TermsAndConditions';
 import PickupDetails from './pages/PickupDetails';
-import ToBeCollected from './pages/ToBeCollected'; // Import ToBeCollected
+import ToBeCollected from './pages/ToBeCollected';
+import DriverManagement from './pages/DriverManagement';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -59,6 +60,11 @@ function App() {
         <Route path="/to-be-collected" element={
           <ProtectedRoute>
             <ToBeCollected />
+          </ProtectedRoute>
+        } />
+        <Route path="/driver-management" element={
+          <ProtectedRoute>
+            <DriverManagement />
           </ProtectedRoute>
         } />
 
