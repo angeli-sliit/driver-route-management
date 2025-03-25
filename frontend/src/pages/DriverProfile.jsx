@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
@@ -7,6 +7,7 @@ const DriverProfile = () => {
   const [driverData, setDriverData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     const fetchDriverProfile = async () => {
@@ -15,94 +16,77 @@ const DriverProfile = () => {
         setError('No authentication token found');
         return;
       }
-  
+
       try {
         const response = await fetch('http://localhost:5000/api/drivers/me', {
           headers: {
             'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
           },
         });
-  
+
         const data = await response.json();
-  
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to fetch driver data');
-        }
-  
+        if (!response.ok) throw new Error(data.error || 'Failed to fetch driver data');
+
         setDriverData(data);
-        if (data.profilePicture) {
-          setProfilePicture(data.profilePicture);
-        }
+        data.profilePicture && setProfilePicture(data.profilePicture);
       } catch (err) {
         setError(err.message);
       } finally {
         setLoading(false);
       }
     };
-  
+
     fetchDriverProfile();
   }, []);
-  
-  
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfilePicture(reader.result);
-      };
+      reader.onloadend = () => setProfilePicture(reader.result);
       reader.readAsDataURL(file);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const file = fileInputRef.current.files[0];
+    if (!file) return;
+
     try {
       const token = localStorage.getItem('token');
+      const formData = new FormData();
+      formData.append('profilePicture', file);
+
       const response = await fetch('http://localhost:5000/api/drivers/upload-profile-picture', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ profilePicture }),
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to update profile picture');
-      }
-
-      const updatedDriver = await response.json();
-      setProfilePicture(updatedDriver.profilePicture);
+      if (!response.ok) throw new Error('Failed to update profile picture');
+      
+      const { profilePicture } = await response.json();
+      setProfilePicture(profilePicture);
     } catch (err) {
-      console.error('Error updating profile picture:', err);
+      console.error('Upload error:', err);
+      alert(err.message);
     }
   };
 
   const formatDate = (dateString) => {
-    const options = { year: 'numeric', month: '2-digit', day: '2-digit' };
-    return new Date(dateString).toLocaleDateString(undefined, options);
+    return new Date(dateString).toLocaleDateString('en-GB');
   };
 
-  if (loading) {
-    return <div className="text-center mt-5">Loading...</div>;
-  }
-
-  if (error) {
-    return (
-      <div className="text-center mt-5 text-danger">
-        Error: {error}
-        <br />
-        <button 
-          className="btn btn-link"
-          onClick={() => window.location.reload()}
-        >
-          Try Again
-        </button>
-      </div>
-    );
-  }
+  if (loading) return <div className="text-center mt-5">Loading...</div>;
+  if (error) return (
+    <div className="text-center mt-5 text-danger">
+      Error: {error}
+      <button className="btn btn-link" onClick={() => window.location.reload()}>
+        Try Again
+      </button>
+    </div>
+  );
 
   return (
     <div className="bg-light min-vh-100 d-flex flex-column">
@@ -113,25 +97,22 @@ const DriverProfile = () => {
         </h1>
 
         <div className="card shadow-lg rounded-4 border-0 p-4 mx-auto" style={{ maxWidth: '900px' }}>
-          {/* Profile Picture */}
           <div className="text-center mb-4">
             <div className="position-relative d-inline-block mb-3">
               <img
-                src={profilePicture || "https://via.placeholder.com/150"}
+                src={profilePicture ? `http://localhost:5000/${profilePicture}` : "https://via.placeholder.com/150"}
                 alt="Profile"
                 className="rounded-circle border border-success border-3 shadow-sm"
                 style={{ width: '140px', height: '140px', objectFit: 'cover' }}
               />
-              <label
-                className="position-absolute bottom-0 end-0 bg-success text-white p-2 rounded-circle"
-                style={{ cursor: 'pointer' }}
-              >
+              <label className="position-absolute bottom-0 end-0 bg-success text-white p-2 rounded-circle" style={{ cursor: 'pointer' }}>
                 <i className="bi bi-camera"></i>
                 <input
                   type="file"
                   accept="image/*"
                   onChange={handleFileChange}
                   className="d-none"
+                  ref={fileInputRef}
                 />
               </label>
             </div>
@@ -141,6 +122,7 @@ const DriverProfile = () => {
               </button>
             </form>
           </div>
+
 
           {/* Info Cards */}
           <div className="row g-4">

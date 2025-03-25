@@ -13,8 +13,11 @@ import {
   optimizeRoute,
   updatePickupDetails,
   deletePickup,
-  optimizedAssignment,
-  assignDailyPickups
+  optimizeAndAssign,
+  assignDailyPickups,
+  confirmPickup, 
+  cancelPickup,
+  getDailySummary 
 } from '../controllers/pickupController.js';
 
 import { protectUser, protectDriver, protectAny, protectAdmin } from '../middleware/authMiddleware.js';
@@ -40,7 +43,8 @@ router.post('/add', protectAny, upload.single('itemImage'), schedulePickup);
 router.post('/assign',  protectAdmin,assignPickup);
 router.post('/assignDailyPickups',  protectAdmin,assignDailyPickups);
 router.post('/update-status', protectDriver, updatePickupStatus);
-router.get('/me', protectDriver, listPickups);
+// In pickupRoutes.js
+router.get('/driver/:driverId', protectDriver, listPickups);
 router.post('/optimize-route', protectDriver, optimizeRoute);
 router.get('/user/scheduled-pickups', protectUser, getUserScheduledPickups);
 router.get('/nowShedule/:id', protectAny, getPickupById);
@@ -52,7 +56,15 @@ router.put('/update/:id', protectUser, updatePickupDetails);
 router.delete('/delete/:id', protectUser, deletePickup);
 
 router.post('/assign-pickups',protectAdmin, getAllPickups );
-router.post('/optimized-assignment', protectAdmin, optimizedAssignment);
+router.post('/optimize-and-assign', protectAdmin, optimizeAndAssign);
+
+router.get('/:driverEmail', protectDriver, listPickups);
+
+router.put('/:id/confirm', protectDriver, upload.single('image'), confirmPickup);
+router.put('/:id/cancel', protectDriver, cancelPickup);
+router.get('/daily-summary/:date', protectAdmin, getDailySummary);
+
+
 
 
 export default router;

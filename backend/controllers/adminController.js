@@ -72,4 +72,19 @@ export const loginAdmin = async (req, res) => {
   }
 };
 
-// Generate optimized pickup list and PDF
+// In adminController.js
+export const verifyAdminPassword = async (req, res) => {
+  try {
+    const { password } = req.body;
+    const admin = await Admin.findById(req.admin._id);
+    
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    const isMatch = await bcrypt.compare(password, admin.password);
+    res.json({ isValid: isMatch });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};

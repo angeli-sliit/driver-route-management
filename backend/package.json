@@ -13,6 +13,7 @@
   "description": "",
   "dependencies": {
     "@googlemaps/google-maps-services-js": "^3.4.0",
+    "@react-pdf/renderer": "^4.3.0",
     "@reduxjs/toolkit": "^2.6.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",

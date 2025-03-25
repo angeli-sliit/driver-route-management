@@ -19,8 +19,8 @@ const Home = () => {
     <div className="bg-light min-vh-100 d-flex flex-column">
       <Navbar />
       <div className="container flex-grow-1 py-5">
-        <h1 className="text-center text-primary fw-bold mb-3">
-          Welcome {driverName || 'Driver'}!
+        <h1 className="text-center text-primary fw-bold mb-3" style={{ paddingTop: '80px' }}>
+          Welcome {driverName || 'John Doe'}!
         </h1>
         
         <div className="d-flex justify-content-center gap-3 mt-4">

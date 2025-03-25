@@ -5,6 +5,18 @@ import User from '../models/User.js';
 import { getOptimizedRoute } from '../utils/googleMaps.js';
 import { optimizePickups } from '../utils/optimizePickups.js';
 import { calculateDistance } from '../utils/distanceCalculator.js';
+import FuelPrice from '../models/FuelPrice.js'; 
+import { sendEmail } from '../utils/emailService.js';
+//import { generateDailySummaryPDF } from '../utils/pdfGenerator.js';
+
+
+
+const FUEL_CONSUMPTION = {
+  'Toyota Dyna': 0.12,
+  'Isuzu Elf': 0.15,
+  'Mitsubishi Canter': 0.13,
+  'Tata LPT 709/1109': 0.18
+};
 
 
 // Optimize route using Google Maps API
@@ -78,39 +90,7 @@ export const schedulePickup = async (req, res) => {
   }
 };
 
-// Assign a pickup to a driver (ADD THIS EXPORT)
-// export const assignPickup = async (req, res) => {
-//   try {
-//     const { pickupId, driverId } = req.body;
-
-//     const pickup = await Pickup.findById(pickupId);
-//     const driver = await Driver.findById(driverId);
-
-//     if (!pickup) return res.status(404).json({ error: "Pickup not found" });
-//     if (!driver) return res.status(404).json({ error: "Driver not found" });
-//     if (driver.status !== 'available') {
-//       return res.status(400).json({ error: "Driver is not available" });
-//     }
-
-//     // Check if pickup is already assigned
-//     if (pickup.driver) {
-//       return res.status(400).json({ error: "Pickup is already assigned to a driver" });
-//     }
-
-//     pickup.driver = driverId;
-//     pickup.status = 'assigned';
-//     await pickup.save();
-
-//     // Update driver status to busy
-//     driver.status = 'busy';
-//     await driver.save();
-
-//     res.status(200).json(pickup);
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// };
-// controllers/pickupController.js
+// Assign pickups to drivers
 export const assignPickup = async (req, res) => {
   try {
     const { date } = req.body;
@@ -172,7 +152,7 @@ export const assignPickup = async (req, res) => {
         pickupUpdates.push({
           updateOne: {
             filter: { _id: pickup._id },
-            update: { $set: { driver: assignedDriver._id, status: 'assigned' } },
+            update: { $set: { driver: assignedDriver._id, employeeStatus: 'assigned' } },
           },
         });
 
@@ -180,7 +160,7 @@ export const assignPickup = async (req, res) => {
         driverUpdates.push({
           updateOne: {
             filter: { _id: assignedDriver._id },
-            update: { $set: { status: 'busy' } },
+            update: { $set: { employeeStatus: 'employeeStatus' } },
           },
         });
       }
@@ -238,19 +218,18 @@ export const updatePickupStatus = async (req, res) => {
 };
 
 // List all pickups
+// In pickupController.js
 export const listPickups = async (req, res) => {
   try {
-    const driverId = req.driver._id; // Ensure the driver's ID is extracted correctly
-
-    // Fetch pickups assigned to the driver
-    const pickups = await Pickup.find({ driver: driverId, status: 'assigned' })
-      .populate('user', 'name email')
-      .populate('driver', 'firstName lastName');
-
+    const driverId = req.params.driverId;
+    const pickups = await Pickup.find({ 
+      driver: driverId,
+      status: 'assigned'
+    }).populate('user driver');
+    
     res.status(200).json(pickups);
   } catch (err) {
-    console.error('Error fetching pickups:', err);
-    res.status(500).json({ error: 'Failed to fetch pickups' });
+    res.status(500).json({ error: err.message });
   }
 };
 
@@ -511,38 +490,97 @@ export const assignPickups = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
-export const optimizedAssignment = async (req, res) => {
+
+
+
+
+export const optimizeAndAssign = async (req, res) => {
   try {
     const { date } = req.body;
-    const fuelPrice = await FuelPrice.findOne().sort({ effectiveDate: -1 });
+    
+    // 1. Get all pending pickups for the date
+    const startDate = new Date(date);
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(date);
+    endDate.setHours(23, 59, 59, 999);
 
-    // Fetch all pending pickups for the given date
-    const pickups = await Pickup.find({
-      scheduledTime: { $gte: new Date(date) },
-      status: 'pending'
-    });
+    const [pickups, drivers, fuelPriceDoc] = await Promise.all([
+      Pickup.find({
+        scheduledTime: { $gte: startDate, $lte: endDate },
+        status: 'pending'
+      }),
+      Driver.find({ 
+        status: 'available',
+        'attendance.date': { $gte: startDate }
+      }),
+      FuelPrice.findOne().sort({ effectiveDate: -1 })
+    ]);
 
-    // Fetch all available drivers
-    const drivers = await Driver.find({ status: 'available' });
-
-    // Optimize pickups
-    const assignments = optimizePickups(pickups, drivers, fuelPrice.price);
-
-    // Save assignments to the database
-    for (const assignment of assignments) {
-      await Pickup.findByIdAndUpdate(assignment.pickup, {
-        driver: assignment.driver,
-        status: 'assigned',
-        fuelCost: assignment.fuelCost
-      });
-
-      await Driver.findByIdAndUpdate(assignment.driver, {
-        status: 'busy'
-      });
+    // 2. Validate inputs
+    if (pickups.length == 0) {
+      return res.status(400).json({ error: 'No pickups scheduled for this date' });
     }
 
-    res.status(200).json({ message: `${assignments.length} pickups assigned optimally` });
+    if (drivers.length == 0) {
+      return res.status(400).json({ error: 'No available drivers' });
+    }
+
+    const fuelPrice = fuelPriceDoc?.price || 286;
+
+    // 3. Optimize assignments using your utility function
+    const assignments = optimizePickups(pickups, drivers, fuelPrice);
+
+    // 4. Prepare database operations
+    const pickupUpdates = [];
+    const driverUpdates = [];
+
+    assignments.forEach(assignment => {
+      // Update pickups
+      pickupUpdates.push({
+        updateMany: {
+          filter: { _id: { $in: assignment.pickups } },
+          update: { 
+            $set: { 
+              driver: assignment.driverId,
+              status: 'assigned',
+              fuelCost: assignment.fuelCost 
+            }
+          }
+        }
+      });
+
+      // Update drivers
+      driverUpdates.push({
+        updateOne: {
+          filter: { _id: assignment.driverId },
+          update: {
+            $set: { status: 'busy' },
+            $push: {
+              routes: {
+                date: startDate,
+                pickups: assignment.pickups,
+                totalDistance: assignment.totalDistance,
+                fuelCost: assignment.fuelCost
+              }
+            }
+          }
+        }
+      });
+    });
+
+    // 5. Execute all updates
+    await Promise.all([
+      Pickup.bulkWrite(pickupUpdates),
+      Driver.bulkWrite(driverUpdates)
+    ]);
+
+    res.status(200).json({
+      message: `${assignments.length} trucks assigned successfully`,
+      assignments
+    });
+
   } catch (err) {
+    console.error('Optimization error:', err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -586,6 +624,8 @@ export const assign = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+
 
 export const assignDailyPickups = async (req, res) => {
   try {
@@ -642,5 +682,135 @@ export const completePickup = async (req, res) => {
     res.status(500).json({ error: 'Completion failed' });
   }
 };
+
+export const confirmPickup = async (req, res) => {
+  try {
+    const pickup = await Pickup.findById(req.params.id)
+      .populate('user', 'email phone')
+      .populate('driver', 'firstName lastName');
+
+    if (!pickup) return res.status(404).json({ error: 'Pickup not found' });
+
+    // Update pickup details
+    pickup.status = 'completed';
+    pickup.weight = req.body.weight;
+    pickup.amount = req.body.amount;
+    pickup.image = req.file?.path;
+    await pickup.save();
+
+    // Send email notification with improved message
+    const emailSent = await sendEmail({
+      to: pickup.user.email,
+      subject: '📦 Pickup Confirmed - Your Order is on its Way!',
+      html: `
+        <p>Dear <strong>${pickup.user.email}</strong>,</p>
+        <p>We are pleased to inform you that your pickup request has been confirmed successfully!</p>
+        ... 
+      `,
+      text: `
+        Dear ${pickup.user.email},
+    
+        We are pleased to inform you that your pickup request has been confirmed successfully!
+    
+        Driver Information:
+        Name: ${pickup.driver.firstName} ${pickup.driver.lastName}
+    
+        Pickup Details:
+        Weight: ${req.body.weight} kg
+        Amount: Rs.${req.body.amount}
+    
+        Thank you for choosing our service! We will keep you updated with any further notifications.
+    
+        If you have any questions, feel free to contact us at any time.
+    
+        Best regards,
+        The Driver Route Management Team
+      `
+    });
+    
+
+    if (!emailSent) {
+      console.warn('Email failed to send, but pickup was confirmed');
+    }
+
+    res.status(200).json({
+      message: 'Pickup confirmed successfully',
+      pickup
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+export const cancelPickup = async (req, res) => {
+  try {
+    const pickup = await Pickup.findById(req.params.id)
+      .populate('user', 'email phone')
+      .populate('driver', 'firstName lastName');
+
+    if (!pickup) return res.status(404).json({ error: 'Pickup not found' });
+
+    pickup.status = 'cancelled';
+    pickup.cancellationReason = req.body.reason;
+    await pickup.save();
+
+    // Send email notification with improved message
+    const emailSent = await sendEmail({
+      to: pickup.user.email,
+      subject: '🚫 Pickup Cancelled - We Apologize for the Inconvenience',
+      text: `
+        Dear ${pickup.user.email},
+    
+        We regret to inform you that your pickup request has been cancelled.
+    
+        Reason for Cancellation:
+        ${req.body.reason}
+    
+        We sincerely apologize for the inconvenience this may have caused. If you have any questions or would like to reschedule the pickup, please do not hesitate to reach out to us.
+    
+        Thank you for your understanding.
+    
+        Best regards,
+        The Driver Route Management Team
+      `
+    });
+    
+
+    if (!emailSent) {
+      console.warn('Email failed to send, but pickup was cancelled');
+    }
+
+    res.status(200).json({
+      message: 'Pickup cancelled successfully',
+      pickup
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+export const getDailySummary = async (req, res) => {
+  try {
+    const date = new Date(req.params.date);
+    const startOfDay = new Date(date.setHours(0, 0, 0, 0));
+    const endOfDay = new Date(date.setHours(23, 59, 59, 999));
+
+    const pickups = await Pickup.find({
+      scheduledTime: { $gte: startOfDay, $lte: endOfDay }
+    }).populate('user driver');
+
+    const pdfUrl = await generateDailySummaryPDF(date, pickups);
+
+    res.status(200).json({
+      pickups,
+      pdfUrl
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 
 

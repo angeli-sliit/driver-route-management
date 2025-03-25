@@ -23,6 +23,7 @@
     "vite": "^6.2.0"
   },
   "dependencies": {
+    "@emailjs/browser": "^4.4.1",
     "@react-google-maps/api": "^2.20.6",
     "@react-leaflet/core": "^3.0.0",
     "@react-pdf/renderer": "^4.3.0",
@@ -30,6 +31,8 @@
     "autoprefixer": "^10.4.21",
     "axios": "^1.8.4",
     "bootstrap": "^5.3.3",
+    "dotenv": "^16.4.7",
+    "emailjs-com": "^3.2.0",
     "jwt-decode": "^4.0.0",
     "leaflet": "^1.9.4",
     "pdf-lib": "^1.17.1",

@@ -5,40 +5,48 @@ const styles = StyleSheet.create({
   page: {
     padding: 20,
     fontSize: 12,
+    fontFamily: 'Helvetica',
   },
   header: {
-    fontSize: 14,
+    fontSize: 16,
     marginBottom: 20,
     textAlign: 'center',
     fontWeight: 'bold',
+    textTransform: 'uppercase',
   },
   table: {
     display: 'table',
     width: '100%',
-    border: '1px solid #000',
+    borderWidth: 1,
+    borderColor: '#000',
+    marginTop: 10,
   },
   tableRow: {
     flexDirection: 'row',
-    borderBottom: '1px solid #000',
+    borderBottomWidth: 1,
+    borderBottomColor: '#000',
+    backgroundColor: '#fff',
   },
   tableCell: {
     flex: 1,
-    padding: 5,
+    padding: 8,
     textAlign: 'center',
-    borderRight: '1px solid #000',
+    borderRightWidth: 1,
+    borderRightColor: '#000',
     fontSize: 10,
     wordBreak: 'break-word',
   },
   tableCellLast: {
     flex: 1,
-    padding: 5,
+    padding: 8,
     textAlign: 'center',
     fontSize: 10,
     wordBreak: 'break-word',
   },
   tableHeader: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#f2f2f2',
     fontWeight: 'bold',
+    paddingVertical: 10,
   },
 });
 
@@ -52,8 +60,8 @@ const DriverPickupListPDF = ({ pickups }) => (
           <Text style={[styles.tableCell, { flex: 1.5 }]}>Contact Number</Text>
           <Text style={styles.tableCell}>Name</Text>
           <Text style={styles.tableCell}>Address</Text>
-          <Text style={styles.tableCell}>Estimated Amount</Text>
-          <Text style={styles.tableCellLast}>Choose Item</Text>
+          <Text style={styles.tableCell}>Estimated Amount (kg)</Text>
+          <Text style={styles.tableCellLast}>Selected Item</Text>
         </View>
 
         {pickups.map((pickup) => (
@@ -62,7 +70,7 @@ const DriverPickupListPDF = ({ pickups }) => (
             <Text style={[styles.tableCell, { flex: 1.5 }]}>{pickup.contactNumber}</Text>
             <Text style={styles.tableCell}>{pickup.user?.name || 'Customer'}</Text>
             <Text style={styles.tableCell}>{pickup.address}</Text>
-            <Text style={styles.tableCell}>{pickup.estimatedAmount}</Text>
+            <Text style={styles.tableCell}>{pickup.estimatedAmount.toFixed(2)}</Text>
             <Text style={styles.tableCellLast}>{pickup.chooseItem}</Text>
           </View>
         ))}
