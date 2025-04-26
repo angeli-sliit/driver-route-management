@@ -1,8 +1,8 @@
 import Admin from '../models/Admin.js';
 import jwt from 'jsonwebtoken';
-import { optimizePickups } from '../utils/optimizePickups.js';
 import Pickup from '../models/Pickup.js';
 import Driver from '../models/Driver.js';
+import bcrypt from 'bcryptjs';
 
 // Admin registration
 export const registerAdmin = async (req, res) => {

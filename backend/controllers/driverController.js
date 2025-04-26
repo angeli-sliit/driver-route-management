@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import Driver from '../models/Driver.js';
 import multer from 'multer';
 import path from 'path';
+import Vehicle from '../models/Vehicle.js';
 
 // Register a new driver
 export const registerDriver = async (req, res) => {
@@ -287,22 +288,102 @@ export const uploadProfilePicture = async (req, res) => {
   }
 };
 
-// Mark attendance
+// Mark attendance for driver
 export const markAttendance = async (req, res) => {
   try {
-    const { date, driverId, status } = req.body;
+    const { driverId, date, status } = req.body;
+
     const driver = await Driver.findById(driverId);
     if (!driver) {
-      return res.status(404).json({ error: "Driver not found" });
+      return res.status(404).json({ success: false, message: 'Driver not found' });
     }
 
-    driver.attendance = driver.attendance || [];
-    driver.attendance.push({ date, status });
-    await driver.save();
+    // Use the markAttendance method we added to the Driver model
+    await driver.markAttendance(date, status);
 
-    res.status(200).json(driver);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(200).json({
+      success: true,
+      message: 'Attendance marked successfully',
+      driver: await Driver.findById(driverId).populate('vehicle')
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Bulk mark attendance for multiple drivers
+export const bulkMarkAttendance = async (req, res) => {
+  try {
+    const { date, driverIds, status } = req.body;
+
+    // Validate inputs
+    if (!date || !Array.isArray(driverIds) || !status) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Please provide date, driverIds array, and status' 
+      });
+    }
+
+    // Mark attendance for each driver
+    const results = await Promise.all(
+      driverIds.map(async (driverId) => {
+        try {
+          const driver = await Driver.findById(driverId);
+          if (!driver) return { driverId, success: false, message: 'Driver not found' };
+          
+          await driver.markAttendance(date, status);
+          return { 
+            driverId, 
+            success: true, 
+            message: 'Attendance marked successfully',
+            name: `${driver.firstName} ${driver.lastName}`
+          };
+        } catch (error) {
+          return { driverId, success: false, message: error.message };
+        }
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Bulk attendance marking completed',
+      results
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Get driver availability status
+export const getDriverAvailability = async (req, res) => {
+  try {
+    const { date } = req.query;
+    
+    const drivers = await Driver.find({}).populate('vehicle');
+    
+    const availability = drivers.map(driver => ({
+      id: driver._id,
+      name: `${driver.firstName} ${driver.lastName}`,
+      status: driver.status,
+      employeeStatus: driver.employeeStatus,
+      hasVehicle: !!driver.vehicle,
+      vehicleDetails: driver.vehicle ? {
+        id: driver.vehicle._id,
+        type: driver.vehicle.vehicleType,
+        regNo: driver.vehicle.registrationNumber
+      } : null,
+      attendance: driver.attendance?.find(a => 
+        new Date(a.date).toDateString() === new Date(date).toDateString()
+      ),
+      isAvailable: driver.isAvailableForDate(date)
+    }));
+
+    res.status(200).json({
+      success: true,
+      drivers: availability
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -320,59 +401,238 @@ export const getAvailableDrivers = async (req, res) => {
 };
 
 // Update driver availability
-// export const updateDriverAvailability = async (req, res) => {
-//   const { id } = req.params;
-//   const { status } = req.body;
-
-//   try {
-//     const driver = await Driver.findByIdAndUpdate(id, { status }, { new: true });
-//     if (!driver) {
-//       return res.status(404).json({ error: 'Driver not found' });
-//     }
-//     res.json(driver);
-//   } catch (error) {
-//     res.status(400).json({ error: error.message });
-//   }
-// };
-
-
-
-// Update driver availability
 export const updateDriverAvailability = async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body;
-
   try {
-    // Get current date (just the date part, no time)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const { status } = req.body;
+    const driver = await Driver.findById(req.params.id);
 
-    const driver = await Driver.findById(id);
     if (!driver) {
-      return res.status(404).json({ error: 'Driver not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Driver not found'
+      });
     }
 
-    // Check if there's already an entry for today
-    const existingEntryIndex = driver.attendance.findIndex(entry => 
-      new Date(entry.date).setHours(0, 0, 0, 0) === today.getTime()
-    );
-
-    if (existingEntryIndex >= 0) {
-      // Update existing entry
-      driver.attendance[existingEntryIndex].status = status;
-    } else {
-      // Add new entry
-      driver.attendance.push({ date: today, status });
-    }
-
-    // Update the driver's overall status
+    // Update driver's status
     driver.status = status;
 
+    // If the driver is being marked as available, ensure they have a vehicle
+    if (status === 'available' && !driver.vehicle) {
+      return res.status(400).json({
+        success: false,
+        message: 'Driver must have a vehicle assigned to be marked as available'
+      });
+    }
+
+    // Save the updated driver
     await driver.save();
 
-    res.json(driver);
+    // If there's a date in the request, also update attendance
+    if (req.body.date) {
+      await driver.markAttendance(req.body.date, status);
+    }
+
+    res.json({
+      success: true,
+      message: 'Driver availability updated successfully',
+      driver: {
+        _id: driver._id,
+        firstName: driver.firstName,
+        lastName: driver.lastName,
+        status: driver.status
+      }
+    });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('Error updating driver availability:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error updating driver availability'
+    });
+  }
+};
+
+// Assign vehicle to driver
+export const assignVehicle = async (req, res) => {
+  try {
+    const { driverId, vehicleId } = req.body;
+
+    // Find the driver and vehicle
+    const [driver, vehicle] = await Promise.all([
+      Driver.findById(driverId),
+      Vehicle.findById(vehicleId)
+    ]);
+
+    if (!driver) {
+      return res.status(404).json({ success: false, message: 'Driver not found' });
+    }
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+
+    // Check if vehicle is already assigned
+    const existingDriver = await Driver.findOne({ vehicle: vehicleId });
+    if (existingDriver && existingDriver._id.toString() !== driverId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Vehicle is already assigned to driver ${existingDriver.firstName} ${existingDriver.lastName}` 
+      });
+    }
+
+    // Assign vehicle to driver
+    driver.vehicle = vehicleId;
+    await driver.save();
+
+    // Return updated driver with vehicle details
+    const updatedDriver = await Driver.findById(driverId).populate('vehicle');
+
+    res.status(200).json({
+      success: true,
+      message: 'Vehicle assigned successfully',
+      driver: {
+        id: updatedDriver._id,
+        name: `${updatedDriver.firstName} ${updatedDriver.lastName}`,
+        vehicle: updatedDriver.vehicle
+      }
+    });
+  } catch (error) {
+    console.error('Error in assignVehicle:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+};
+
+// Helper function to set up drivers with vehicles and attendance
+export const setupDriversForDate = async (req, res) => {
+  try {
+    const { date } = req.body;
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: 'Date is required'
+      });
+    }
+
+    // First, create vehicles if none exist
+    const existingVehicles = await Vehicle.find({});
+    let vehicles = existingVehicles;
+    
+    if (existingVehicles.length === 0) {
+      const defaultVehicles = [
+        {
+          vehicleType: 'Toyota Dyna',
+          registrationNumber: 'ABC-1234',
+          maxCapacity: 2000,
+          fuelConsumption: 12
+        },
+        {
+          vehicleType: 'Isuzu Elf',
+          registrationNumber: 'DEF-5678',
+          maxCapacity: 3000,
+          fuelConsumption: 15
+        },
+        {
+          vehicleType: 'Mitsubishi Canter',
+          registrationNumber: 'GHI-9012',
+          maxCapacity: 2500,
+          fuelConsumption: 13
+        }
+      ];
+
+      vehicles = await Vehicle.create(defaultVehicles);
+      console.log('Created default vehicles:', vehicles);
+    }
+
+    // Get all drivers
+    const drivers = await Driver.find({});
+    
+    if (drivers.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No drivers found in the system'
+      });
+    }
+
+    // Track setup results
+    const results = {
+      success: [],
+      failed: []
+    };
+
+    // Assign vehicles and mark attendance for each driver
+    for (const driver of drivers) {
+      try {
+        // Assign vehicle if driver doesn't have one
+        if (!driver.vehicle && vehicles.length > 0) {
+          // Find an unassigned vehicle
+          const availableVehicle = vehicles.find(v => 
+            !drivers.some(d => d.vehicle && d.vehicle.toString() === v._id.toString())
+          );
+          
+          if (availableVehicle) {
+            driver.vehicle = availableVehicle._id;
+          }
+        }
+
+        // Set status to available and mark attendance
+        driver.status = 'available';
+        driver.employeeStatus = 'notAssigned';
+        
+        // Mark attendance for the date
+        await driver.markAttendance(date, 'available');
+        await driver.save();
+
+        results.success.push({
+          driverId: driver._id,
+          name: `${driver.firstName} ${driver.lastName}`,
+          vehicleAssigned: !!driver.vehicle
+        });
+      } catch (error) {
+        console.error(`Error setting up driver ${driver._id}:`, error);
+        results.failed.push({
+          driverId: driver._id,
+          name: `${driver.firstName} ${driver.lastName}`,
+          error: error.message
+        });
+      }
+    }
+
+    // Get final driver availability
+    const availability = await Promise.all(drivers.map(async (driver) => {
+      const updatedDriver = await Driver.findById(driver._id).populate('vehicle');
+      return {
+        id: updatedDriver._id,
+        name: `${updatedDriver.firstName} ${updatedDriver.lastName}`,
+        status: updatedDriver.status,
+        employeeStatus: updatedDriver.employeeStatus,
+        hasVehicle: !!updatedDriver.vehicle,
+        vehicleDetails: updatedDriver.vehicle ? {
+          id: updatedDriver.vehicle._id,
+          type: updatedDriver.vehicle.vehicleType,
+          regNo: updatedDriver.vehicle.registrationNumber
+        } : null,
+        attendance: updatedDriver.attendance?.find(a => 
+          new Date(a.date).toDateString() === new Date(date).toDateString()
+        ),
+        isAvailable: updatedDriver.isAvailableForDate(date)
+      };
+    }));
+
+    const availableCount = availability.filter(d => d.isAvailable).length;
+
+    res.status(200).json({
+      success: true,
+      message: `Setup completed. ${availableCount} drivers available for ${new Date(date).toLocaleDateString()}`,
+      results,
+      availability
+    });
+  } catch (error) {
+    console.error('Error in setupDriversForDate:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 };
 

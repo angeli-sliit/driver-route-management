@@ -409,8 +409,14 @@ const DriverManagement = () => {
                       <Form.Control
                         type="text"
                         value={selectedDriver.firstName}
-                        onChange={(e) => setSelectedDriver({...selectedDriver, firstName: e.target.value})}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^A-Za-z\s'-]/g, '');
+                          setSelectedDriver({...selectedDriver, firstName: value});
+                        }}
                         className="border-success"
+                        pattern="[A-Za-z\s'-]+"
+                        title="Only letters, spaces, hyphens, and apostrophes allowed"
+                        required
                       />
                     </Form.Group>
                     <Form.Group className="mb-3">
@@ -418,8 +424,14 @@ const DriverManagement = () => {
                       <Form.Control
                         type="text"
                         value={selectedDriver.lastName}
-                        onChange={(e) => setSelectedDriver({...selectedDriver, lastName: e.target.value})}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^A-Za-z\s'-]/g, '');
+                          setSelectedDriver({...selectedDriver, lastName: value});
+                        }}
                         className="border-success"
+                        pattern="[A-Za-z\s'-]+"
+                        title="Only letters, spaces, hyphens, and apostrophes allowed"
+                        required
                       />
                     </Form.Group>
                     <Form.Group className="mb-3">
@@ -429,6 +441,7 @@ const DriverManagement = () => {
                         value={selectedDriver.email}
                         onChange={(e) => setSelectedDriver({...selectedDriver, email: e.target.value})}
                         className="border-success"
+                        required
                       />
                     </Form.Group>
                     <Form.Group className="mb-3">
@@ -437,6 +450,25 @@ const DriverManagement = () => {
                         type="text"
                         value={selectedDriver.nic}
                         onChange={(e) => setSelectedDriver({...selectedDriver, nic: e.target.value})}
+                        className="border-success"
+                        required
+                      />
+                    </Form.Group>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Birthday</Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={selectedDriver.birthday}
+                        onChange={(e) => setSelectedDriver({...selectedDriver, birthday: e.target.value})}
+                        className="border-success"
+                      />
+                    </Form.Group>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Nationality</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={selectedDriver.nationality}
+                        onChange={(e) => setSelectedDriver({...selectedDriver, nationality: e.target.value})}
                         className="border-success"
                       />
                     </Form.Group>
@@ -450,6 +482,7 @@ const DriverManagement = () => {
                         value={selectedDriver.employeeId}
                         onChange={(e) => setSelectedDriver({...selectedDriver, employeeId: e.target.value})}
                         className="border-success"
+                        required
                       />
                     </Form.Group>
                     <Form.Group className="mb-3">
@@ -463,6 +496,15 @@ const DriverManagement = () => {
                         <option value="Contract">Contract</option>
                         <option value="Trainee">Trainee</option>
                       </Form.Select>
+                    </Form.Group>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Joined Date</Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={selectedDriver.joinedDate}
+                        onChange={(e) => setSelectedDriver({...selectedDriver, joinedDate: e.target.value})}
+                        className="border-success"
+                      />
                     </Form.Group>
                     <Form.Group className="mb-3">
                       <Form.Label>Vehicle Type</Form.Label>
@@ -484,6 +526,7 @@ const DriverManagement = () => {
                         value={selectedDriver.vehicleNumber}
                         onChange={(e) => setSelectedDriver({...selectedDriver, vehicleNumber: e.target.value})}
                         className="border-success"
+                        required
                       />
                     </Form.Group>
                   </Col>
@@ -577,8 +620,14 @@ const DriverManagement = () => {
                     <Form.Control
                       type="text"
                       value={newDriver.firstName}
-                      onChange={(e) => setNewDriver({...newDriver, firstName: e.target.value})}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^A-Za-z\s'-]/g, '');
+                        setNewDriver({...newDriver, firstName: value});
+                      }}
                       className="border-success"
+                      pattern="[A-Za-z\s'-]+"
+                      title="Only letters, spaces, hyphens, and apostrophes allowed"
+                      required
                     />
                   </Form.Group>
                   <Form.Group className="mb-3">
@@ -586,8 +635,14 @@ const DriverManagement = () => {
                     <Form.Control
                       type="text"
                       value={newDriver.lastName}
-                      onChange={(e) => setNewDriver({...newDriver, lastName: e.target.value})}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^A-Za-z\s'-]/g, '');
+                        setNewDriver({...newDriver, lastName: value});
+                      }}
                       className="border-success"
+                      pattern="[A-Za-z\s'-]+"
+                      title="Only letters, spaces, hyphens, and apostrophes allowed"
+                      required
                     />
                   </Form.Group>
                   <Form.Group className="mb-3">
@@ -597,6 +652,7 @@ const DriverManagement = () => {
                       value={newDriver.email}
                       onChange={(e) => setNewDriver({...newDriver, email: e.target.value})}
                       className="border-success"
+                      required
                     />
                   </Form.Group>
                   <Form.Group className="mb-3">
@@ -605,6 +661,26 @@ const DriverManagement = () => {
                       type="password"
                       value={newDriver.password}
                       onChange={(e) => setNewDriver({...newDriver, password: e.target.value})}
+                      className="border-success"
+                      required
+                    />
+                  </Form.Group>
+                  <Form.Group className="mb-3">
+                    <Form.Label>NIC</Form.Label>
+                    <Form.Control
+                      type="text"
+                      value={newDriver.nic}
+                      onChange={(e) => setNewDriver({...newDriver, nic: e.target.value})}
+                      className="border-success"
+                      required
+                    />
+                  </Form.Group>
+                  <Form.Group className="mb-3">
+                    <Form.Label>Nationality</Form.Label>
+                    <Form.Control
+                      type="text"
+                      value={newDriver.nationality}
+                      onChange={(e) => setNewDriver({...newDriver, nationality: e.target.value})}
                       className="border-success"
                     />
                   </Form.Group>
@@ -618,6 +694,7 @@ const DriverManagement = () => {
                       value={newDriver.employeeId}
                       onChange={(e) => setNewDriver({...newDriver, employeeId: e.target.value})}
                       className="border-success"
+                      required
                     />
                   </Form.Group>
                   <Form.Group className="mb-3">
@@ -632,6 +709,24 @@ const DriverManagement = () => {
                       <option value="Contract">Contract</option>
                       <option value="Trainee">Trainee</option>
                     </Form.Select>
+                  </Form.Group>
+                  <Form.Group className="mb-3">
+                    <Form.Label>Joined Date</Form.Label>
+                    <Form.Control
+                      type="date"
+                      value={newDriver.joinedDate}
+                      onChange={(e) => setNewDriver({...newDriver, joinedDate: e.target.value})}
+                      className="border-success"
+                    />
+                  </Form.Group>
+                  <Form.Group className="mb-3">
+                    <Form.Label>Birthday</Form.Label>
+                    <Form.Control
+                      type="date"
+                      value={newDriver.birthday}
+                      onChange={(e) => setNewDriver({...newDriver, birthday: e.target.value})}
+                      className="border-success"
+                    />
                   </Form.Group>
                   <Form.Group className="mb-3">
                     <Form.Label>Vehicle Type</Form.Label>
@@ -654,54 +749,7 @@ const DriverManagement = () => {
                       value={newDriver.vehicleNumber}
                       onChange={(e) => setNewDriver({...newDriver, vehicleNumber: e.target.value})}
                       className="border-success"
-                    />
-                  </Form.Group>
-                </Col>
-              </Row>
-              <Row>
-                <Col md={6}>
-                  <Form.Group className="mb-3">
-                    <Form.Label>NIC</Form.Label>
-                    <Form.Control
-                      type="text"
-                      value={newDriver.nic}
-                      onChange={(e) => setNewDriver({...newDriver, nic: e.target.value})}
-                      className="border-success"
-                    />
-                  </Form.Group>
-                </Col>
-                <Col md={6}>
-                  <Form.Group className="mb-3">
-                    <Form.Label>Nationality</Form.Label>
-                    <Form.Control
-                      type="text"
-                      value={newDriver.nationality}
-                      onChange={(e) => setNewDriver({...newDriver, nationality: e.target.value})}
-                      className="border-success"
-                    />
-                  </Form.Group>
-                </Col>
-              </Row>
-              <Row>
-                <Col md={6}>
-                  <Form.Group className="mb-3">
-                    <Form.Label>Birthday</Form.Label>
-                    <Form.Control
-                      type="date"
-                      value={newDriver.birthday}
-                      onChange={(e) => setNewDriver({...newDriver, birthday: e.target.value})}
-                      className="border-success"
-                    />
-                  </Form.Group>
-                </Col>
-                <Col md={6}>
-                  <Form.Group className="mb-3">
-                    <Form.Label>Joined Date</Form.Label>
-                    <Form.Control
-                      type="date"
-                      value={newDriver.joinedDate}
-                      onChange={(e) => setNewDriver({...newDriver, joinedDate: e.target.value})}
-                      className="border-success"
+                      required
                     />
                   </Form.Group>
                 </Col>

@@ -3,10 +3,13 @@ import Driver from '../models/Driver.js';
 import { PDFDocument } from 'pdf-lib';
 import User from '../models/User.js';
 import { getOptimizedRoute } from '../utils/googleMaps.js';
-import { optimizePickups } from '../utils/optimizePickups.js';
 import { calculateDistance } from '../utils/distanceCalculator.js';
 import FuelPrice from '../models/FuelPrice.js'; 
 import { sendEmail } from '../utils/emailService.js';
+import { enhancedOptimizePickups } from '../utils/enhancedOptimization.js';
+import { optimizeVehicleRoutes } from '../utils/orsOptimizer.js';
+import Vehicle from '../models/Vehicle.js';
+import { optimizeAndSchedulePickups } from '../services/optimizationService.js';
 //import { generateDailySummaryPDF } from '../utils/pdfGenerator.js';
 
 
@@ -494,95 +497,49 @@ export const assignPickups = async (req, res) => {
 
 
 
-export const optimizeAndAssign = async (req, res) => {
-  try {
-    const { date } = req.body;
-    
-    // 1. Get all pending pickups for the date
-    const startDate = new Date(date);
-    startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date(date);
-    endDate.setHours(23, 59, 59, 999);
+export const optimizeAndAssignPickups = async (req, res) => {
+    try {
+        const { date } = req.body;
 
-    const [pickups, drivers, fuelPriceDoc] = await Promise.all([
-      Pickup.find({
-        scheduledTime: { $gte: startDate, $lte: endDate },
-        status: 'pending'
-      }),
-      Driver.find({ 
-        status: 'available',
-        'attendance.date': { $gte: startDate }
-      }),
-      FuelPrice.findOne().sort({ effectiveDate: -1 })
-    ]);
-
-    // 2. Validate inputs
-    if (pickups.length == 0) {
-      return res.status(400).json({ error: 'No pickups scheduled for this date' });
-    }
-
-    if (drivers.length == 0) {
-      return res.status(400).json({ error: 'No available drivers' });
-    }
-
-    const fuelPrice = fuelPriceDoc?.price || 286;
-
-    // 3. Optimize assignments using your utility function
-    const assignments = optimizePickups(pickups, drivers, fuelPrice);
-
-    // 4. Prepare database operations
-    const pickupUpdates = [];
-    const driverUpdates = [];
-
-    assignments.forEach(assignment => {
-      // Update pickups
-      pickupUpdates.push({
-        updateMany: {
-          filter: { _id: { $in: assignment.pickups } },
-          update: { 
-            $set: { 
-              driver: assignment.driverId,
-              status: 'assigned',
-              fuelCost: assignment.fuelCost 
-            }
-          }
+        if (!date) {
+            return res.status(400).json({
+                success: false,
+                message: 'Date is required for optimization'
+            });
         }
-      });
 
-      // Update drivers
-      driverUpdates.push({
-        updateOne: {
-          filter: { _id: assignment.driverId },
-          update: {
-            $set: { status: 'busy' },
-            $push: {
-              routes: {
-                date: startDate,
-                pickups: assignment.pickups,
-                totalDistance: assignment.totalDistance,
-                fuelCost: assignment.fuelCost
-              }
-            }
-          }
+        // Validate date format
+        const selectedDate = new Date(date);
+        if (isNaN(selectedDate.getTime())) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid date format'
+            });
         }
-      });
-    });
 
-    // 5. Execute all updates
-    await Promise.all([
-      Pickup.bulkWrite(pickupUpdates),
-      Driver.bulkWrite(driverUpdates)
-    ]);
+        // Call the optimization service
+        const result = await optimizeAndSchedulePickups(date);
 
-    res.status(200).json({
-      message: `${assignments.length} trucks assigned successfully`,
-      assignments
-    });
+        if (!result.success) {
+            return res.status(400).json(result);
+        }
 
-  } catch (err) {
-    console.error('Optimization error:', err);
-    res.status(500).json({ error: err.message });
-  }
+        res.status(200).json({
+            success: true,
+            message: 'Pickups optimized and assigned successfully',
+            data: {
+                assignments: result.assignments,
+                unassignedPickups: result.unassignedPickups
+            }
+        });
+    } catch (error) {
+        console.error('Error in optimizeAndAssignPickups:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to optimize and assign pickups',
+            error: error.message
+        });
+    }
 };
 
 

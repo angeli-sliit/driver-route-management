@@ -1,19 +1,60 @@
 // frontend/src/pages/Home.jsx
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useNavigate } from 'react-router-dom';
+import LeaveRequestForm from '../components/LeaveRequestForm';
+import { Modal, Button, Table, Badge, Spinner, Alert } from 'react-bootstrap';
+import { toast } from 'react-hot-toast';
+import axios from 'axios';
+import { API_BASE_URL } from '../config.js';
 
 const Home = () => {
   const navigate = useNavigate();
   const driverName = localStorage.getItem('driverName');
+  const [showLeaveRequestForm, setShowLeaveRequestForm] = useState(false);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [leaveLoading, setLeaveLoading] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
       navigate('/');
+    } else {
+      fetchLeaveRequests();
     }
+    // eslint-disable-next-line
   }, [navigate]);
+
+  const fetchLeaveRequests = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API_BASE_URL}/api/leave-requests/my-requests`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setLeaveRequests(response.data.data || []);
+    } catch (error) {
+      // Optionally show error
+    } finally {
+      setLeaveLoading(false);
+    }
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-GB'); // DD/MM/YYYY
+  };
+
+  // Helper to check if a date is today
+  const isToday = (dateString) => {
+    const date = new Date(dateString);
+    const today = new Date();
+    return (
+      date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
+    );
+  };
 
   return (
     <div className="bg-light min-vh-100 d-flex flex-column">
@@ -36,8 +77,79 @@ const Home = () => {
           >
             User Profile
           </button>
+          <button
+            onClick={() => setShowLeaveRequestForm(true)}
+            className="btn btn-warning px-4 py-2"
+          >
+            Request Leave
+          </button>
+        </div>
+
+        {/* Leave Request Status Table */}
+        <div className="mt-5">
+          <h4 className="mb-3">My Leave Requests</h4>
+          {leaveLoading ? (
+            <div className="text-center p-3">
+              <Spinner animation="border" variant="primary" />
+            </div>
+          ) : leaveRequests.length === 0 ? (
+            <Alert variant="info">No leave requests found.</Alert>
+          ) : (
+            <Table striped bordered hover responsive>
+              <thead>
+                <tr>
+                  <th>Start Date</th>
+                  <th>End Date</th>
+                  <th>Reason</th>
+                  <th>Status</th>
+                  <th>Admin Response</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaveRequests
+                  .filter(req => !isToday(req.startDate))
+                  .map((req) => (
+                    <tr key={req._id}>
+                      <td>{formatDate(req.startDate)}</td>
+                      <td>{formatDate(req.endDate)}</td>
+                      <td>{req.reason}</td>
+                      <td>
+                        <Badge
+                          bg={
+                            req.status === 'Approved'
+                              ? 'success'
+                              : req.status === 'Rejected'
+                              ? 'danger'
+                              : 'warning'
+                          }
+                        >
+                          {req.status}
+                        </Badge>
+                      </td>
+                      <td>{req.adminResponse || '-'}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </Table>
+          )}
         </div>
       </div>
+      <Modal show={showLeaveRequestForm} onHide={() => setShowLeaveRequestForm(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Request Leave</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <LeaveRequestForm 
+            show={showLeaveRequestForm} 
+            onHide={() => setShowLeaveRequestForm(false)} 
+            onSuccess={() => {
+              setShowLeaveRequestForm(false);
+              toast.success('Leave request submitted successfully!');
+              fetchLeaveRequests(); // Refresh leave requests after submission
+            }} 
+          />
+        </Modal.Body>
+      </Modal>
       <Footer />
     </div>
   );
