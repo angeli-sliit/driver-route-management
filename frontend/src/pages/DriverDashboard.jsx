@@ -240,11 +240,16 @@ const DriverDashboard = () => {
   
 
   return (
-    <div className="bg-light min-vh-100 d-flex flex-column">
+    <div className="min-h-screen bg-gray-900 text-white">
       <Navbar />
-      <main className="flex-grow-1 container py-4">
-        <h1 className="text-center text-primary fw-bold mb-4" style={{ paddingTop: '80px' }}>Driver Dashboard</h1>
-
+      <div className="container py-5">
+        <div className="bg-gray-800 rounded p-4">
+          <div className="row mb-4 justify-content-center text-center">
+           <div className="col-md-8">
+            <h1 className="text-center fw-bold mb-3" style={{ color: '#0f5132' }}>Driver Dashboard</h1>
+            <p className="text-success fw-bold">Welcome back! Here's your schedule for today.</p>
+          </div>
+        </div>
         {error && (
           <Alert variant="danger" className="mb-4">
             {error}
@@ -354,8 +359,9 @@ const DriverDashboard = () => {
           setImage={setImage}
           image={image}
         />
-      </main>
+      </div>
       <Footer />
+    </div>
     </div>
   );
 };

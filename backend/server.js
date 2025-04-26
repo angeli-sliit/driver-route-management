@@ -14,6 +14,7 @@ import userRoutes from './routes/userRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import fuelPriceRoutes from './routes/fuelPriceRoutes.js';
 import routeRoutes from './routes/routeRoutes.js';
+import leaveRequestRoutes from './routes/leaveRequestRoutes.js';
 
 // Config
 dotenv.config();
@@ -27,7 +28,19 @@ const httpServer = createServer(app);
 // Middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use(cors());
+
+// Enhanced CORS configuration
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production' 
+    ? [process.env.FRONTEND_URL, process.env.ADMIN_URL] 
+    : ['http://localhost:5173', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  maxAge: 86400 // 24 hours
+};
+app.use(cors(corsOptions));
+
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 
@@ -37,6 +50,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/admins', adminRoutes);
 app.use('/api/fuel-price', fuelPriceRoutes);
 app.use('/api/routes', routeRoutes);
+app.use('/api/leave-requests', leaveRequestRoutes);
 
 
 const io = new Server(httpServer, {
