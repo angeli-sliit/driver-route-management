@@ -90,4 +90,4 @@ The app will be available at [http://localhost:3000](http://localhost:3000)
 5. Open a Pull Request
 
 ## License
-This project is licensed under the MIT License.
+This project is licensed under the MIT License.pls tell me what do you think about my project? tell me my code fylly funtional things...... tobe improved one also

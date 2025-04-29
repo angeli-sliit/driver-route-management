@@ -5,6 +5,7 @@ import Pickup from '../models/Pickup.js';
 import Driver from '../models/Driver.js';
 import Vehicle from '../models/Vehicle.js';
 import FuelPrice from '../models/FuelPrice.js';
+import PickupAssignment from '../models/PickupAssignment.js';
 import axios from 'axios';
 import { generateAssignmentReport } from '../utils/reportGenerator.js';
 
@@ -252,8 +253,7 @@ export const optimizeAndSchedulePickups = async (date) => {
         }
 
         // Process the optimization results
-        const updatedDrivers = [];
-        const updatedPickups = [];
+        const assignments = [];
         const routeDetails = [];
         const summary = {
             totalPickups: pendingPickups.length,
@@ -322,25 +322,19 @@ export const optimizeAndSchedulePickups = async (date) => {
                         
                         routeSteps.push(routeStep);
 
+                        // Calculate optimization details
+                        const distance = calculateDistance(route.duration || 0);
+                        const fuelCost = calculateFuelCost(route.duration || 0, fuelPrice.price);
+
                         // Individual pickup update
                         pickupUpdates.push({
                             updateOne: {
                                 filter: { _id: pickup._id },
                                 update: {
                                     $set: {
-                                        driver: driver._id, // Add direct driver reference
+                                        driver: driver._id,
                                         assignedDriver: driver._id,
-                                        status: 'assigned',
-                                        routeDetails: {
-                                            vehicleId: route.vehicle,
-                                            driverName: `${driver.firstName} ${driver.lastName}`,
-                                            driverPhone: driver.phone,
-                                            vehicleType: driver.vehicle?.type,
-                                            vehiclePlateNumber: driver.vehicle?.plateNumber,
-                                            sequence: routeStep,
-                                            assignedAt: new Date(),
-                                            estimatedArrival: new Date(startOfDay.getTime() + (step.arrival * 1000))
-                                        }
+                                        status: 'assigned'
                                     }
                                 }
                             }
@@ -365,6 +359,34 @@ export const optimizeAndSchedulePickups = async (date) => {
                 assignedAt: new Date()
             };
 
+            // Create pickup assignment
+            const pickupAssignment = new PickupAssignment({
+                date: startOfDay,
+                driver: driver._id,
+                pickups: routeSteps.map((step, index) => ({
+                    pickup: step.pickupId,
+                    sequence: index + 1,
+                    estimatedArrivalTime: new Date(step.arrivalTime),
+                    distance: step.distance || 0,
+                    duration: step.duration || 0
+                })),
+                routeDetails: {
+                    totalPoints: routeSteps.length,
+                    totalWeight: route.amount?.[0] || 0,
+                    totalFuelCost: routeMetrics.fuelCost,
+                    totalDistance: routeMetrics.totalDistance,
+                    totalDuration: routeMetrics.totalDuration,
+                    startTime: new Date(routeMetrics.startTime),
+                    endTime: new Date(routeMetrics.endTime),
+                    vehicleType: driver.vehicle?.type || 'N/A',
+                    vehiclePlateNumber: driver.vehicle?.plateNumber || 'N/A'
+                },
+                status: 'pending',
+                assignedAt: new Date()
+            });
+
+            assignments.push(pickupAssignment);
+
             // Create detailed route information
             const routeDetail = {
                 routeId: route.vehicle,
@@ -385,36 +407,6 @@ export const optimizeAndSchedulePickups = async (date) => {
 
             routeDetails.push(routeDetail);
 
-            // Update driver's assigned pickups
-            updatedDrivers.push({
-                updateOne: {
-                    filter: { _id: driver._id },
-                    update: {
-                        $set: {
-                            assignedPickups: pickupIds,
-                            currentRoute: {
-                                ...route,
-                                metrics: routeMetrics,
-                                detailedSteps: routeSteps,
-                                assignedAt: new Date()
-                            },
-                            lastAssignment: new Date()
-                        }
-                    }
-                }
-            });
-
-            // Add all pickup updates
-            updatedPickups.push(...pickupUpdates);
-
-            // Update summary metrics
-            summary.assignedPickups += routeSteps.length;
-            summary.unassignedPickups -= routeSteps.length;
-            summary.overallMetrics.totalDistance += routeMetrics.totalDistance;
-            summary.overallMetrics.totalDuration += routeMetrics.totalDuration;
-            summary.overallMetrics.totalFuelCost += routeMetrics.fuelCost;
-            summary.overallMetrics.totalLoad += routeMetrics.totalLoad;
-
             // Update driver status
             driver.isAvailable = false;
             driver.currentRoute = {
@@ -429,12 +421,12 @@ export const optimizeAndSchedulePickups = async (date) => {
 
         // Perform bulk updates with error handling
         try {
-            if (updatedDrivers.length > 0) {
-                const driverResult = await Driver.bulkWrite(updatedDrivers);
-                console.log('Driver updates:', driverResult);
-            }
-            if (updatedPickups.length > 0) {
-                const pickupResult = await Pickup.bulkWrite(updatedPickups);
+            // Save all pickup assignments
+            await PickupAssignment.insertMany(assignments);
+            
+            // Update pickups
+            if (pickupUpdates.length > 0) {
+                const pickupResult = await Pickup.bulkWrite(pickupUpdates);
                 console.log('Pickup updates:', pickupResult);
             }
         } catch (error) {

@@ -24,13 +24,12 @@ export const registerDriver = async (req, res) => {
       });
     }
 
-    // Check for duplicates
+    // Check for duplicates (excluding vehicle number)
     const existingDriver = await Driver.findOne({ 
       $or: [
         { email },
         { employeeId },
-        { nic },
-        { vehicleNumber }
+        { nic }
       ]
     });
     
@@ -39,11 +38,48 @@ export const registerDriver = async (req, res) => {
       if (existingDriver.email === email) conflictField = 'email';
       else if (existingDriver.employeeId === employeeId) conflictField = 'employee ID';
       else if (existingDriver.nic === nic) conflictField = 'NIC';
-      else if (existingDriver.vehicleNumber === vehicleNumber) conflictField = 'vehicle number';
       
       return res.status(400).json({ 
         error: `Driver with this ${conflictField} already exists` 
       });
+    }
+
+    // If vehicleNumber is provided, check if it's already assigned
+    if (vehicleNumber) {
+      const existingVehicleNumber = await Driver.findOne({ vehicleNumber });
+      if (existingVehicleNumber) {
+        return res.status(400).json({ 
+          error: 'This vehicle number is already assigned to another driver' 
+        });
+      }
+    }
+
+    // Truck capacities in kilograms
+    const TRUCK_CAPACITIES = {
+      'Toyota Dyna': 3000,
+      'Isuzu Elf': 4000,
+      'Mitsubishi Canter': 3500,
+      'Tata LPT 709/1109': 5000
+    };
+    // Fuel consumption rate in liters per km
+    const FUEL_CONSUMPTION = {
+      'Toyota Dyna': 0.12,
+      'Isuzu Elf': 0.15,
+      'Mitsubishi Canter': 0.13,
+      'Tata LPT 709/1109': 0.18
+    };
+
+    // Check if vehicle exists, if not create it
+    let vehicle = await Vehicle.findOne({ registrationNumber: vehicleNumber });
+    if (!vehicle) {
+      vehicle = new Vehicle({
+        vehicleType,
+        registrationNumber: vehicleNumber,
+        maxCapacity: TRUCK_CAPACITIES[vehicleType] || 2000,
+        fuelConsumption: FUEL_CONSUMPTION[vehicleType] || 0.12,
+        status: 'available'
+      });
+      await vehicle.save();
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -60,8 +96,10 @@ export const registerDriver = async (req, res) => {
       nationality,
       employeeType,
       joinedDate: new Date(joinedDate),
-      vehicleNumber,
-      status: 'available',
+      vehicleNumber: vehicleNumber || undefined, // Only set if provided
+      status: 'unavailable',
+      employeeStatus: 'notAssigned',
+      vehicle: vehicle._id // assign vehicle ObjectId
     });
 
     await driver.save();
@@ -74,7 +112,9 @@ export const registerDriver = async (req, res) => {
         email: driver.email,
         employeeId: driver.employeeId,
         vehicleType: driver.vehicleType,
-        status: driver.status
+        vehicleNumber: driver.vehicleNumber,
+        status: driver.status,
+        vehicle: driver.vehicle
       }
     });
   } catch (err) {
@@ -90,7 +130,7 @@ export const registerDriver = async (req, res) => {
 // Get all drivers
 export const getDrivers = async (req, res) => {
   try {
-    const drivers = await Driver.find().select('-password');
+    const drivers = await Driver.find().select('-password').populate('vehicle');
     res.status(200).json(drivers);
   } catch (err) {
     res.status(500).json({ error: err.message });

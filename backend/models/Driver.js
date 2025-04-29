@@ -46,6 +46,11 @@ const driverSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Vehicle'
   },
+  vehicleNumber: {
+    type: String,
+    sparse: true, // This allows multiple null values
+    unique: true  // This ensures uniqueness for non-null values
+  },
   currentLocation: {
     type: {
       type: String,
@@ -89,8 +94,13 @@ const driverSchema = new mongoose.Schema({
       enum: ['active', 'completed', 'cancelled'],
       default: 'active'
     }
-  }]
-}, { timestamps: true });
+  }],
+  vehicleType: {
+    type: String,
+    enum: ['Toyota Dyna', 'Isuzu Elf', 'Mitsubishi Canter', 'Tata LPT 709/1109'],
+    required: true
+  },
+});
 
 // Add validation to ensure drivers have vehicles when marked as available
 driverSchema.pre('save', async function(next) {
@@ -117,21 +127,34 @@ driverSchema.methods.isAvailableForDate = function(date) {
 
 // Add method to mark attendance for a date
 driverSchema.methods.markAttendance = async function(date, status) {
-  const targetDate = new Date(date);
-  const existingAttendance = this.attendance.find(a => 
-    new Date(a.date).toDateString() === targetDate.toDateString()
-  );
-
-  if (existingAttendance) {
-    existingAttendance.status = status;
-  } else {
-    this.attendance.push({
-      date: targetDate,
-      status: status
+  try {
+    // Ensure date is a proper Date object
+    const targetDate = new Date(date);
+    
+    // Set time to midnight to ensure consistent date comparison
+    targetDate.setHours(0, 0, 0, 0);
+    
+    // Find existing attendance for this date
+    const existingAttendance = this.attendance.find(a => {
+      const attendanceDate = new Date(a.date);
+      attendanceDate.setHours(0, 0, 0, 0);
+      return attendanceDate.getTime() === targetDate.getTime();
     });
+
+    if (existingAttendance) {
+      existingAttendance.status = status;
+    } else {
+      this.attendance.push({
+        date: targetDate,
+        status: status
+      });
+    }
+    
+    return this.save();
+  } catch (error) {
+    console.error('Error in markAttendance:', error);
+    throw error;
   }
-  
-  return this.save();
 };
 
 driverSchema.index({ currentLocation: '2dsphere' });

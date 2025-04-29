@@ -1,5 +1,5 @@
 import React from 'react';
-import { PDFDownloadLink, Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 
 const styles = StyleSheet.create({
   page: { padding: 20, fontSize: 12, fontFamily: 'Helvetica' },
@@ -27,8 +27,8 @@ const PickupListPDF = ({ pickups, drivers, fuelPrice }) => (
             <Text style={styles.tableCell}>Driver</Text>
             <Text style={styles.tableCellLast}>Status</Text>
           </View>
-          {drivers.filter(driver => driver.status === 'available').map(driver => (
-            <View style={styles.tableRow} key={driver._id}>
+          {drivers.filter(driver => driver.status === 'available').map((driver, index) => (
+            <View style={styles.tableRow} key={`driver-${driver._id || index}`}>
               <Text style={styles.tableCell}>{driver.firstName} {driver.lastName}</Text>
               <Text style={styles.tableCellLast}>{driver.status}</Text>
             </View>
@@ -46,12 +46,12 @@ const PickupListPDF = ({ pickups, drivers, fuelPrice }) => (
             <Text style={styles.tableCell}>Total Load (kg)</Text>
             <Text style={styles.tableCellLast}>Fuel Cost (LKR)</Text>
           </View>
-          {drivers.map(driver => {
+          {drivers.map((driver, index) => {
             const driverPickups = pickups.filter(p => p.driver === driver._id);
             const totalLoad = driverPickups.reduce((sum, p) => sum + (p.estimatedAmount || 0), 0);
             const totalFuel = driverPickups.reduce((sum, p) => sum + (p.fuelCost || 0), 0);
             return (
-              <View style={styles.tableRow} key={driver._id}>
+              <View style={styles.tableRow} key={`overview-${driver._id || index}`}>
                 <Text style={styles.tableCell}>{driver.firstName} {driver.lastName}</Text>
                 <Text style={styles.tableCell}>{driverPickups.length}</Text>
                 <Text style={styles.tableCell}>{totalLoad.toFixed(2)}</Text>
@@ -61,7 +61,6 @@ const PickupListPDF = ({ pickups, drivers, fuelPrice }) => (
           })}
         </View>
       </View>
-
     </Page>
   </Document>
 );

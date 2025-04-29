@@ -84,23 +84,42 @@ const sendAuthError = (res, message) => res.status(401).json({
 
 //admin protection middleware
 export const protectAdmin = async (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
+  let token;
+  
+  console.log('Headers:', req.headers);
+  console.log('Authorization header:', req.headers.authorization);
+
+  if (req.headers.authorization?.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+    console.log('Extracted token:', token);
+  } else {
+    console.log('No Bearer token found in Authorization header');
+  }
+
   if (!token) {
+    console.log('No token provided');
     return res.status(401).json({ error: 'Not authorized, no token provided' });
   }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const admin = await Admin.findById(decoded.id);
+    console.log('Decoded token:', decoded);
+    
+    const adminUser = await Admin.findById(decoded._id);
+    console.log('Found admin:', adminUser ? 'Yes' : 'No');
+    console.log('Admin user:', adminUser);
 
-    if (!admin) {
+    if (!adminUser) {
+      console.log('Admin not found for ID:', decoded._id);
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    req.admin = admin;
+    req.token = token;
+    req.admin = adminUser;
     next();
   } catch (error) {
-    res.status(401).json({ error: 'Invalid token ' });
+    console.error('Admin auth error:', error);
+    res.status(401).json({ error: 'Please authenticate as admin' });
   }
 };
 // Universal protection middleware

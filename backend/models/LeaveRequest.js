@@ -18,6 +18,11 @@ const leaveRequestSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  type: {
+    type: String,
+    enum: ['SICK', 'VACATION', 'PERSONAL', 'EMERGENCY'],
+    required: true
+  },
   status: {
     type: String,
     enum: ['Pending', 'Approved', 'Rejected'],
@@ -39,14 +44,29 @@ const leaveRequestSchema = new mongoose.Schema({
 
 // Middleware to check if request is made at least 24 hours before
 leaveRequestSchema.pre('save', function(next) {
-  const now = new Date();
-  const startDate = new Date(this.startDate);
-  const hoursDiff = (startDate - now) / (1000 * 60 * 60);
-  
-  if (hoursDiff < 24) {
-    next(new Error('Leave requests must be made at least 24 hours in advance'));
+  try {
+    // Skip validation for updates that don't change the startDate
+    if (!this.isModified('startDate')) {
+      return next();
+    }
+    
+    const now = new Date();
+    const startDate = new Date(this.startDate);
+    const hoursDiff = (startDate - now) / (1000 * 60 * 60);
+    
+    // Skip 24-hour validation for emergency leave
+    if (this.type === 'EMERGENCY') {
+      return next();
+    }
+    
+    if (hoursDiff < 24) {
+      return next(new Error('Leave requests must be made at least 24 hours in advance'));
+    }
+    
+    next();
+  } catch (error) {
+    next(error);
   }
-  next();
 });
 
 const LeaveRequest = mongoose.model('LeaveRequest', leaveRequestSchema);

@@ -6,9 +6,10 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PickupConfirmationModal from '../components/PickupConfirmationModal';
 import { useNavigate } from 'react-router-dom';
-import { PDFDownloadLink } from '@react-pdf/renderer';
 import DriverPickupListPDF from '../components/DriverPickupListPDF';
 import emailjs from 'emailjs-com';
+import { PDFDownloadLink } from '@react-pdf/renderer';
+import OptimizedRouteMap from '../components/OptimizedRouteMap';
 
 const DriverDashboard = () => {
   const [pickups, setPickups] = useState([]);
@@ -19,6 +20,7 @@ const DriverDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [image, setImage] = useState(null);
+  const [optimizedRoute, setOptimizedRoute] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -80,6 +82,24 @@ const DriverDashboard = () => {
 
     getInitialLocation();
   }, [navigate]);
+
+  useEffect(() => {
+    const fetchOptimizedRoute = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      try {
+        const response = await axios.get('http://localhost:5000/api/pickups/driver-today-route', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.data && response.data.route) {
+          setOptimizedRoute(response.data.route);
+        }
+      } catch (err) {
+        setOptimizedRoute(null);
+      }
+    };
+    fetchOptimizedRoute();
+  }, []);
 
   const sendEmail = async (templateParams) => {
     try {
@@ -282,6 +302,7 @@ const DriverDashboard = () => {
               status: p.status
             }))}
             loading={loading}
+            optimizedRoute={optimizedRoute}
           />
         </div>
 
@@ -289,12 +310,20 @@ const DriverDashboard = () => {
           <PDFDownloadLink
             document={<DriverPickupListPDF pickups={pickups} />}
             fileName="today_pickups.pdf"
+            style={{ textDecoration: 'none' }}
           >
-            {({ loading }) => (
-              <Button variant="danger" className="px-4 py-2">
-                {loading ? 'Generating PDF...' : 'Download Today\'s Pickup List'}
-              </Button>
-            )}
+            {({ loading }) =>
+              loading ? (
+                <button className="btn btn-outline-success" disabled>
+                  Generating PDF...
+                </button>
+              ) : (
+                <button className="btn btn-outline-success">
+                  <i className="bi bi-file-earmark-pdf me-2"></i>
+                  Download Today's Pickup List
+                </button>
+              )
+            }
           </PDFDownloadLink>
         </div>
 
@@ -359,9 +388,33 @@ const DriverDashboard = () => {
           setImage={setImage}
           image={image}
         />
+
+        {/* Optimized Route Section (from components/DriverDashboard.jsx) */}
+        <div className="route-section  rounded p-4 mb-4">
+          {loading ? (
+            <div className="loading">Loading route...</div>
+          ) : error ? (
+            <div className="error">{error}</div>
+          ) : (
+            <>
+              <OptimizedRouteMap route={optimizedRoute || []} />
+              <div className="route-details">
+                <h3>Route Details</h3>
+                <ul>
+                  {(optimizedRoute || []).map((location, index) => (
+                    <li key={index}>
+                      {index === 0 ? 'Current Location: ' : `Stop ${index}: `}
+                      {location.address ? location.address : `${location.lat}, ${location.lng}`}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </>
+          )}
+        </div>
+        </div>
       </div>
       <Footer />
-    </div>
     </div>
   );
 };

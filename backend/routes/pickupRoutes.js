@@ -16,7 +16,9 @@ import {
   confirmPickup, 
   cancelPickup,
   getDailySummary,
-  optimizeAndAssignPickups
+  optimizeAndAssignPickups,
+  getAssignmentsByDate,
+  getDriverRouteForToday
 } from '../controllers/pickupController.js';
 
 import { protectUser, protectDriver, protectAny, protectAdmin } from '../middleware/authMiddleware.js';
@@ -60,5 +62,10 @@ router.post('/optimize-and-assign', protectAdmin, optimizeAndAssignPickups);
 
 // Admin routes
 router.post('/optimize', protectAdmin, optimizeAndAssignPickups);
+
+router.get('/assignments', protectAdmin, getAssignmentsByDate);
+
+// Add this route for driver route
+router.get('/driver-today-route', protectDriver, getDriverRouteForToday);
 
 export default router;

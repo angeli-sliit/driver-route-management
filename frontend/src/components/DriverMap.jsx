@@ -39,6 +39,7 @@ const DriverMap = () => {
           lng: pickup.address.lng,
           text: pickup.address.text,
           item: pickup.chooseItem,
+          id: pickup._id
         }));
 
         setPickupLocations(formattedLocations);

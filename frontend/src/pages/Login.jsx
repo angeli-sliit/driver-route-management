@@ -38,7 +38,10 @@ const Login = () => {
         password: data.password,
       });
 
-      localStorage.setItem('token', response.data.token);
+      // Always save the token if present
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+      }
 
       switch (data.role) {
         case 'user':
@@ -48,13 +51,16 @@ const Login = () => {
           }));
           navigate('/add-pickup');
           break;
-        case 'driver':
+        case 'driver': {
+          // Use response.data.driver if present, fallback to response.data
+          const driver = response.data.driver || response.data;
           localStorage.setItem('driverData', JSON.stringify({
-            id: response.data._id,
-            name: `${response.data.firstName} ${response.data.lastName}`,
+            id: driver.id || driver._id,
+            name: driver.name || `${driver.firstName || ''} ${driver.lastName || ''}`.trim(),
           }));
           navigate('/home');
           break;
+        }
         case 'admin':
           localStorage.setItem('adminData', JSON.stringify({
             id: response.data._id,
@@ -65,6 +71,12 @@ const Login = () => {
         default:
           throw new Error('Invalid role selected');
       }
+
+      // Debug: log what is saved
+      console.log('Token:', localStorage.getItem('token'));
+      console.log('UserData:', localStorage.getItem('userData'));
+      console.log('DriverData:', localStorage.getItem('driverData'));
+      console.log('AdminData:', localStorage.getItem('adminData'));
     } catch (err) {
       const errorMessage = err.response?.data?.error ||
         err.message ||

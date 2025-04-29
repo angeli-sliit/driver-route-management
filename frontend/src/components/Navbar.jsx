@@ -1,14 +1,15 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import logo from '../assets/logo.png';
 
 const Navbar = () => {
   const navigate = useNavigate();
-  const driverName = localStorage.getItem('driverName');
+  const driverData = JSON.parse(localStorage.getItem('driverData') || '{}');
+  const driverName = driverData.name ? driverData.name.split(' ')[0] : 'Driver';
 
   const handleLogout = () => {
     localStorage.removeItem('token');
-    localStorage.removeItem('driverName');
+    localStorage.removeItem('driverData');
     navigate('/');
   };
 
