@@ -1,69 +1,75 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Button, Form, Alert } from 'react-bootstrap';
+import { Modal, Button, Form, Alert, Spinner } from 'react-bootstrap';
+import useFormValidation from '../hooks/useFormValidation';
+import { pickupConfirmationValidationRules } from '../utils/validation';
+import { toast } from 'react-hot-toast';
 
 const PickupConfirmationModal = ({ show, onConfirm, onCancel, onClose, mode, image, setImage }) => {
-  const [formData, setFormData] = useState({
-    weight: '',
-    amount: '',
-    reason: ''
-  });
-  const [errors, setErrors] = useState({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const {
+    values,
+    errors,
+    touched,
+    isSubmitting,
+    setIsSubmitting,
+    handleChange,
+    handleBlur,
+    validateForm,
+    resetForm
+  } = useFormValidation(
+    {
+      weight: '',
+      amount: '',
+      reason: ''
+    },
+    mode === 'confirm' 
+      ? { weight: pickupConfirmationValidationRules.weight, amount: pickupConfirmationValidationRules.amount }
+      : { reason: pickupConfirmationValidationRules.reason }
+  );
 
   useEffect(() => {
     if (!show) {
-      // Reset form and image when modal closes
-      setFormData({ weight: '', amount: '', reason: '' });
-      setErrors({});
-      setImage(null); // Reset image when modal closes
+      resetForm();
+      setImage(null);
     }
-  }, [show, setImage]);
+  }, [show]);
 
-  const validateForm = () => {
-    const newErrors = {};
-    
-    if (mode === 'confirm') {
-      if (!formData.weight.trim()) newErrors.weight = 'Weight is required';
-      if (!formData.amount.trim()) newErrors.amount = 'Amount is required';
-      if (isNaN(formData.weight)) newErrors.weight = 'Invalid weight';
-      if (isNaN(formData.amount)) newErrors.amount = 'Invalid amount';
-    } else if (mode === 'cancel') {
-      if (!formData.reason.trim()) newErrors.reason = 'Reason is required';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    
+    if (!validateForm()) {
+      return;
+    }
 
     setIsSubmitting(true);
     
     try {
       if (mode === 'confirm') {
-        // Include the image in the confirmation data
-        onConfirm({
-          weight: parseFloat(formData.weight),
-          amount: parseFloat(formData.amount),
-          image: image // Pass the image file to the onConfirm handler
+        if (!image) {
+          toast.error('Please upload a proof image');
+          return;
+        }
+        
+        await onConfirm({
+          weight: parseFloat(values.weight),
+          amount: parseFloat(values.amount),
+          image
         });
+        toast.success('Pickup confirmed successfully!');
       } else {
-        onCancel(formData.reason);
+        await onCancel(values.reason);
+        toast.success('Pickup cancelled successfully!');
       }
+      onClose();
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     } catch (error) {
-      console.error('Submission error:', error);
-      setErrors({ general: error.message });
+      toast.error(error.message || 'An error occurred');
     } finally {
       setIsSubmitting(false);
-      onClose();
     }
-  };
-
-  const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) setErrors(prev => ({ ...prev, [field]: null }));
   };
 
   return (
@@ -74,10 +80,8 @@ const PickupConfirmationModal = ({ show, onConfirm, onCancel, onClose, mode, ima
         </Modal.Title>
       </Modal.Header>
       
-      <Form onSubmit={handleSubmit}>
+      <Form onSubmit={handleSubmit} noValidate>
         <Modal.Body>
-          {errors.general && <Alert variant="danger">{errors.general}</Alert>}
-
           {mode === 'confirm' && (
             <>
               <Form.Group className="mb-3">
@@ -85,14 +89,18 @@ const PickupConfirmationModal = ({ show, onConfirm, onCancel, onClose, mode, ima
                 <Form.Control
                   type="number"
                   step="0.1"
+                  name="weight"
                   placeholder="Enter weight in kilograms"
-                  value={formData.weight}
-                  onChange={(e) => handleChange('weight', e.target.value)}
-                  isInvalid={!!errors.weight}
+                  value={values.weight}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  isInvalid={touched.weight && errors.weight}
                 />
-                <Form.Control.Feedback type="invalid">
-                  {errors.weight}
-                </Form.Control.Feedback>
+                {touched.weight && errors.weight && (
+                  <Form.Control.Feedback type="invalid">
+                    {errors.weight}
+                  </Form.Control.Feedback>
+                )}
               </Form.Group>
 
               <Form.Group className="mb-3">
@@ -100,14 +108,18 @@ const PickupConfirmationModal = ({ show, onConfirm, onCancel, onClose, mode, ima
                 <Form.Control
                   type="number"
                   step="1"
+                  name="amount"
                   placeholder="Enter amount in LKR"
-                  value={formData.amount}
-                  onChange={(e) => handleChange('amount', e.target.value)}
-                  isInvalid={!!errors.amount}
+                  value={values.amount}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  isInvalid={touched.amount && errors.amount}
                 />
-                <Form.Control.Feedback type="invalid">
-                  {errors.amount}
-                </Form.Control.Feedback>
+                {touched.amount && errors.amount && (
+                  <Form.Control.Feedback type="invalid">
+                    {errors.amount}
+                  </Form.Control.Feedback>
+                )}
               </Form.Group>
 
               <Form.Group className="mb-3">
@@ -115,15 +127,30 @@ const PickupConfirmationModal = ({ show, onConfirm, onCancel, onClose, mode, ima
                 <Form.Control
                   type="file"
                   onChange={(e) => setImage(e.target.files[0])}
-                  accept="image/*" // Allow only image files
+                  accept="image/*"
+                  isInvalid={touched.image && !image}
                 />
+                {touched.image && !image && (
+                  <Form.Control.Feedback type="invalid">
+                    Please upload a proof image
+                  </Form.Control.Feedback>
+                )}
                 {image && (
-                  <img
-                    src={URL.createObjectURL(image)}
-                    alt="Proof"
-                    className="mt-2"
-                    style={{ maxWidth: '100%', maxHeight: '200px', objectFit: 'contain' }}
-                  />
+                  <div className="mt-2">
+                    <img
+                      src={URL.createObjectURL(image)}
+                      alt="Proof"
+                      className="img-fluid"
+                      style={{ maxHeight: '200px', objectFit: 'contain' }}
+                    />
+                    <Button 
+                      variant="link" 
+                      className="text-danger p-0 mt-2"
+                      onClick={() => setImage(null)}
+                    >
+                      Remove image
+                    </Button>
+                  </div>
                 )}
               </Form.Group>
             </>
@@ -135,14 +162,18 @@ const PickupConfirmationModal = ({ show, onConfirm, onCancel, onClose, mode, ima
               <Form.Control
                 as="textarea"
                 rows={3}
+                name="reason"
                 placeholder="Explain why you can't complete this pickup"
-                value={formData.reason}
-                onChange={(e) => handleChange('reason', e.target.value)}
-                isInvalid={!!errors.reason}
+                value={values.reason}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                isInvalid={touched.reason && errors.reason}
               />
-              <Form.Control.Feedback type="invalid">
-                {errors.reason}
-              </Form.Control.Feedback>
+              {touched.reason && errors.reason && (
+                <Form.Control.Feedback type="invalid">
+                  {errors.reason}
+                </Form.Control.Feedback>
+              )}
             </Form.Group>
           )}
         </Modal.Body>
@@ -156,7 +187,21 @@ const PickupConfirmationModal = ({ show, onConfirm, onCancel, onClose, mode, ima
             type="submit"
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Processing...' : mode === 'confirm' ? 'Confirm Pickup' : 'Cancel Pickup'}
+            {isSubmitting ? (
+              <>
+                <Spinner
+                  as="span"
+                  animation="border"
+                  size="sm"
+                  role="status"
+                  aria-hidden="true"
+                  className="me-2"
+                />
+                Processing...
+              </>
+            ) : (
+              mode === 'confirm' ? 'Confirm Pickup' : 'Cancel Pickup'
+            )}
           </Button>
         </Modal.Footer>
       </Form>

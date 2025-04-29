@@ -10,6 +10,9 @@ import { enhancedOptimizePickups } from '../utils/enhancedOptimization.js';
 import { optimizeVehicleRoutes } from '../utils/orsOptimizer.js';
 import Vehicle from '../models/Vehicle.js';
 import { optimizeAndSchedulePickups } from '../services/optimizationService.js';
+import PickupAssignment from '../models/PickupAssignment.js';
+import MetalPrice from '../models/MetalPrice.js';
+import polyline from 'polyline';
 //import { generateDailySummaryPDF } from '../utils/pdfGenerator.js';
 
 
@@ -263,25 +266,83 @@ export const getPickupById = async (req, res) => {
   }
 };
 
+// Helper functions for Sri Lanka Standard Time (UTC+5:30)
+function getSLStartOfDay(date) {
+  const offsetMs = 5.5 * 60 * 60 * 1000;
+  const local = new Date(date.getTime() + offsetMs);
+  return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), 0, 0, 0) - offsetMs);
+}
+function getSLEndOfDay(date) {
+  const offsetMs = 5.5 * 60 * 60 * 1000;
+  const local = new Date(date.getTime() + offsetMs);
+  return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), 23, 59, 59, 999) - offsetMs);
+}
+
 // Controller
 export const getAllPickups = async (req, res) => {
   try {
     const { date } = req.query;
-
-    // If a date is provided, filter pickups for that specific date
-    const query = date ? { 
+    const queryDate = date ? new Date(date) : new Date();
+    const startOfDay = getSLStartOfDay(queryDate);
+    const endOfDay = getSLEndOfDay(queryDate);
+    // Get all pickups for the date
+    const pickups = await Pickup.find({
       scheduledTime: { 
-        $gte: new Date(new Date(date).setHours(0, 0, 0, 0)), // Start of the day
-        $lt: new Date(new Date(date).setHours(23, 59, 59, 999)) // End of the day
-      } 
-    } : {};
+        $gte: startOfDay,
+        $lt: endOfDay
+      }
+    })
+    .populate('driver', 'firstName lastName phone')
+    .populate('user', 'name');
+    // Get all assignments for the date
+    const assignments = await PickupAssignment.find({
+      date: {
+        $gte: startOfDay,
+        $lt: endOfDay
+      }
+    })
+    .populate('driver', 'firstName lastName phone')
+    .populate('pickups.pickup')
+    .sort({ 'routeDetails.startTime': 1 });
+    // Format the response to include driver details and optimization info
+    const formattedPickups = pickups.map(pickup => {
+      // Find the assignment that contains this pickup
+      const assignment = assignments.find(a => 
+        a.pickups && a.pickups.some(p => p.pickup && p.pickup._id && p.pickup._id.toString() === pickup._id.toString())
+      );
+      
+      const pickupInAssignment = assignment && assignment.pickups ? 
+        assignment.pickups.find(p => p.pickup && p.pickup._id && p.pickup._id.toString() === pickup._id.toString()) : null;
 
-    const pickups = await Pickup.find(query)
-      .populate('driver', 'firstName lastName')
-      .populate('user', 'name');
+      return {
+        ...pickup.toObject(),
+        driverDetails: pickup.driver ? {
+          name: `${pickup.driver.firstName} ${pickup.driver.lastName}`,
+          phone: pickup.driver.phone
+        } : null,
+        assignmentDetails: assignment ? {
+          routeSequence: pickupInAssignment ? pickupInAssignment.sequence : null,
+          estimatedArrivalTime: pickupInAssignment ? pickupInAssignment.estimatedArrivalTime : null,
+          distance: pickupInAssignment ? pickupInAssignment.distance : null,
+          duration: pickupInAssignment ? pickupInAssignment.duration : null,
+          routeInfo: {
+            totalPoints: assignment.routeDetails.totalPoints,
+            totalWeight: assignment.routeDetails.totalWeight,
+            totalFuelCost: assignment.routeDetails.totalFuelCost,
+            totalDistance: assignment.routeDetails.totalDistance,
+            totalDuration: assignment.routeDetails.totalDuration,
+            startTime: assignment.routeDetails.startTime,
+            endTime: assignment.routeDetails.endTime,
+            vehicleType: assignment.routeDetails.vehicleType,
+            vehiclePlateNumber: assignment.routeDetails.vehiclePlateNumber
+          }
+        } : null
+      };
+    });
 
-    res.status(200).json(pickups);
+    res.status(200).json(formattedPickups);
   } catch (err) {
+    console.error('Error in getAllPickups:', err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -498,48 +559,173 @@ export const assignPickups = async (req, res) => {
 
 
 export const optimizeAndAssignPickups = async (req, res) => {
-    try {
-        const { date } = req.body;
-
-        if (!date) {
-            return res.status(400).json({
-                success: false,
-                message: 'Date is required for optimization'
-            });
-        }
-
-        // Validate date format
-        const selectedDate = new Date(date);
-        if (isNaN(selectedDate.getTime())) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid date format'
-            });
-        }
-
-        // Call the optimization service
-        const result = await optimizeAndSchedulePickups(date);
-
-        if (!result.success) {
-            return res.status(400).json(result);
-        }
-
-        res.status(200).json({
-            success: true,
-            message: 'Pickups optimized and assigned successfully',
-            data: {
-                assignments: result.assignments,
-                unassignedPickups: result.unassignedPickups
-            }
-        });
-    } catch (error) {
-        console.error('Error in optimizeAndAssignPickups:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to optimize and assign pickups',
-            error: error.message
-        });
+  try {
+    const { date } = req.body;
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: 'Date is required for optimization'
+      });
     }
+    const selectedDate = new Date(date);
+    if (isNaN(selectedDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date format'
+      });
+    }
+    // Get latest fuel price
+    const fuelPriceDoc = await FuelPrice.findOne().sort({ effectiveDate: -1 });
+    const fuelPrice = fuelPriceDoc ? fuelPriceDoc.price : 0;
+    // Get all pending pickups for the date
+    const pickups = await Pickup.find({
+      scheduledTime: { $gte: selectedDate },
+      status: 'pending'
+    }).lean();
+    // Get all available drivers with populated vehicle
+    const drivers = await Driver.find({ status: 'available' }).populate('vehicle').lean();
+    if (drivers.length === 0) {
+      return res.status(400).json({ success: false, message: 'No available drivers' });
+    }
+    // Prepare driver stats
+    const driverStats = {};
+    drivers.forEach(driver => {
+      if (driver.vehicle && driver.vehicle.maxCapacity && driver.vehicle.fuelConsumption) {
+        driverStats[driver._id] = {
+          driverId: driver._id,
+          name: `${driver.firstName} ${driver.lastName}`,
+          vehicleType: driver.vehicle.vehicleType,
+          vehicleNumber: driver.vehicle.registrationNumber,
+          totalWeight: 0,
+          totalFuel: 0,
+          totalCost: 0,
+          pickups: []
+        };
+      }
+    });
+    // Get all metal prices
+    const metalPrices = await MetalPrice.find({});
+    const metalPriceMap = {};
+    metalPrices.forEach(mp => { metalPriceMap[mp.metalType] = mp.pricePerKg; });
+    // Assign pickups to drivers (simple greedy by capacity)
+    for (const pickup of pickups) {
+      let assigned = false;
+      for (const driver of drivers) {
+        if (!driverStats[driver._id]) continue;
+        const stat = driverStats[driver._id];
+        const remainingCapacity = driver.vehicle.maxCapacity - stat.totalWeight;
+        if (remainingCapacity >= pickup.estimatedAmount) {
+          // Calculate real distance between driver and pickup
+          const driverLat = driver.currentLocation.coordinates[1];
+          const driverLon = driver.currentLocation.coordinates[0];
+          const pickupLat = pickup.location.coordinates[1];
+          const pickupLon = pickup.location.coordinates[0];
+          let distance = calculateDistance(driverLat, driverLon, pickupLat, pickupLon); // in km
+          distance = Number(distance.toFixed(3));
+          const fuel = distance * driver.vehicle.fuelConsumption;
+          // Robust cost calculation
+          let metalType = (pickup.chooseItem || '').toLowerCase().trim();
+          if (!metalPriceMap[metalType]) {
+            console.warn(`Metal type '${metalType}' not found in metalPriceMap. Defaulting to 'iron'.`);
+            metalType = 'iron';
+          }
+          const metalPrice = metalPriceMap[metalType] || 0;
+          const metalCost = metalPrice * pickup.estimatedAmount;
+          let fuelPriceSafe = fuelPrice;
+          if (!fuelPriceSafe || isNaN(fuelPriceSafe) || fuelPriceSafe <= 0) {
+            console.warn(`Fuel price is missing or zero. Defaulting to 500.`);
+            fuelPriceSafe = 500;
+          }
+          const fuelCost = fuel * fuelPriceSafe;
+          const cost = fuelCost + metalCost;
+          stat.totalWeight += pickup.estimatedAmount;
+          stat.totalFuel += fuel;
+          stat.totalCost += cost;
+          stat.pickups.push({
+            pickupId: pickup._id,
+            address: pickup.address,
+            estimatedAmount: pickup.estimatedAmount,
+            distance,
+            fuel,
+            cost
+          });
+          // Assign pickup and store optimization details
+          await Pickup.findByIdAndUpdate(pickup._id, {
+            $set: {
+              driver: driver._id,
+              status: 'assigned',
+              fuelCost: fuelCost, // actual fuel cost in LKR
+              chooseItem: metalType, // auto-fix in DB
+              'optimizationDetails.distance': distance,
+              'optimizationDetails.fuel': fuel,
+              'optimizationDetails.fuelCost': fuelCost,
+              'optimizationDetails.routeSequence': stat.pickups.length,
+              'optimizationDetails.estimatedArrivalTime': new Date(selectedDate.getTime() + (stat.pickups.length - 1) * 30 * 60000),
+              'optimizationDetails.assignedAt': new Date(),
+              'optimizationDetails.metalCost': metalCost,
+              'optimizationDetails.totalCost': cost
+            }
+          });
+          assigned = true;
+          break;
+        }
+      }
+      if (!assigned) {
+        // Could not assign pickup
+      }
+    }
+    // Update driver statuses
+    await Driver.updateMany(
+      { _id: { $in: Object.keys(driverStats) } },
+      { $set: { status: 'busy' } }
+    );
+
+    // Create PickupAssignment records for each driver
+    const assignmentPromises = Object.values(driverStats).map(async (stat) => {
+      if (!stat.pickups.length) return null;
+      return PickupAssignment.create({
+        date: selectedDate,
+        driver: stat.driverId,
+        pickups: stat.pickups.map((p, idx) => ({
+          pickup: p.pickupId,
+          sequence: idx + 1,
+          estimatedArrivalTime: new Date(selectedDate.getTime() + idx * 30 * 60000), // Dummy ETA: +30min per stop
+          distance: p.distance,
+          duration: 30 // Dummy duration
+        })),
+        routeDetails: {
+          totalPoints: stat.pickups.length,
+          totalWeight: stat.totalWeight,
+          totalFuelCost: stat.totalCost,
+          totalDistance: stat.pickups.reduce((sum, p) => sum + p.distance, 0),
+          totalDuration: stat.pickups.length * 30, // Dummy: 30min per stop
+          startTime: selectedDate,
+          endTime: new Date(selectedDate.getTime() + stat.pickups.length * 30 * 60000),
+          vehicleType: stat.vehicleType,
+          vehiclePlateNumber: stat.vehicleNumber
+        },
+        status: 'pending',
+        assignedAt: new Date(),
+        notes: ''
+      });
+    });
+    await Promise.all(assignmentPromises);
+
+    // Prepare response
+    const performance = Object.values(driverStats);
+    res.status(200).json({
+      success: true,
+      message: 'Pickups optimized and assigned successfully',
+      performance
+    });
+  } catch (error) {
+    console.error('Error in optimizeAndAssignPickups:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to optimize and assign pickups',
+      error: error.message
+    });
+  }
 };
 
 
@@ -653,6 +839,17 @@ export const confirmPickup = async (req, res) => {
     pickup.weight = req.body.weight;
     pickup.amount = req.body.amount;
     pickup.image = req.file?.path;
+
+    // Ensure optimizationDetails are set for reporting/statistics
+    const opt = pickup.optimizationDetails || {};
+    pickup.optimizationDetails = {
+      ...opt,
+      distance: typeof opt.distance === 'number' && opt.distance > 0 ? opt.distance : 1, // fallback 1km
+      fuel: typeof opt.fuel === 'number' && opt.fuel > 0 ? opt.fuel : 0.12, // fallback 0.12L
+      fuelCost: typeof opt.fuelCost === 'number' && opt.fuelCost > 0 ? opt.fuelCost : 0, // fallback 0
+      totalCost: typeof opt.totalCost === 'number' && opt.totalCost > 0 ? opt.totalCost : 0 // fallback 0
+    };
+
     await pickup.save();
 
     // Send email notification with improved message
@@ -751,19 +948,217 @@ export const cancelPickup = async (req, res) => {
 export const getDailySummary = async (req, res) => {
   try {
     const date = new Date(req.params.date);
-    const startOfDay = new Date(date.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(date.setHours(23, 59, 59, 999));
-
+    const startOfDay = getSLStartOfDay(date);
+    const endOfDay = getSLEndOfDay(date);
     const pickups = await Pickup.find({
       scheduledTime: { $gte: startOfDay, $lte: endOfDay }
     }).populate('user driver');
-
     const pdfUrl = await generateDailySummaryPDF(date, pickups);
+    res.status(200).json({ pickups, pdfUrl });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
 
-    res.status(200).json({
-      pickups,
-      pdfUrl
+export const generateDriverPerformancePDF = async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) {
+      return res.status(400).json({ error: 'Date is required' });
+    }
+    const selectedDate = new Date(date);
+    if (isNaN(selectedDate.getTime())) {
+      return res.status(400).json({ error: 'Invalid date format' });
+    }
+    // Get latest fuel price
+    const fuelPriceDoc = await FuelPrice.findOne().sort({ effectiveDate: -1 });
+    const fuelPrice = fuelPriceDoc ? fuelPriceDoc.price : 0;
+    // Get all pickups for the date (assigned only)
+    const pickups = await Pickup.find({
+      scheduledTime: { $gte: selectedDate },
+      status: 'assigned'
+    }).populate('driver');
+    // Prepare driver stats
+    const driverStats = {};
+    pickups.forEach(pickup => {
+      const driver = pickup.driver;
+      if (!driver) return;
+      if (!driverStats[driver._id]) {
+        driverStats[driver._id] = {
+          name: `${driver.firstName} ${driver.lastName}`,
+          vehicleType: driver.vehicleType,
+          vehicleNumber: driver.vehicleNumber,
+          totalWeight: 0,
+          totalFuel: 0,
+          totalCost: 0,
+          pickups: []
+        };
+      }
+      // Use dummy values for distance/fuel/cost if not present
+      const distance = 1; // TODO: use real distance if available
+      const fuel = distance * (driver.vehicle?.fuelConsumption || 0.12);
+      const cost = fuel * fuelPrice;
+      driverStats[driver._id].totalWeight += pickup.estimatedAmount;
+      driverStats[driver._id].totalFuel += fuel;
+      driverStats[driver._id].totalCost += cost;
+      driverStats[driver._id].pickups.push({
+        address: pickup.address,
+        estimatedAmount: pickup.estimatedAmount,
+        distance,
+        fuel,
+        cost
+      });
     });
+    // Generate PDF
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage();
+    const { width, height } = page.getSize();
+    const fontSize = 12;
+    let y = height - 50;
+    page.drawText(`Driver Performance Report for ${selectedDate.toLocaleDateString()}`, { x: 50, y, size: fontSize + 4, bold: true });
+    y -= 30;
+    for (const stat of Object.values(driverStats)) {
+      page.drawText(`Driver: ${stat.name} | Vehicle: ${stat.vehicleType} (${stat.vehicleNumber})`, { x: 50, y, size: fontSize });
+      y -= 20;
+      page.drawText(`Total Weight: ${stat.totalWeight} kg | Total Fuel: ${stat.totalFuel.toFixed(2)} L | Total Cost: Rs. ${stat.totalCost.toFixed(2)}`, { x: 50, y, size: fontSize });
+      y -= 20;
+      stat.pickups.forEach((pickup, idx) => {
+        page.drawText(`  Pickup ${idx + 1}: ${pickup.address} | Weight: ${pickup.estimatedAmount} kg | Fuel: ${pickup.fuel.toFixed(2)} L | Cost: Rs. ${pickup.cost.toFixed(2)}`, { x: 60, y, size: fontSize });
+        y -= 16;
+      });
+      y -= 16;
+      if (y < 100) {
+        page = pdfDoc.addPage();
+        y = height - 50;
+      }
+    }
+    const pdfBytes = await pdfDoc.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.send(pdfBytes);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Get assignments/performance by date
+export const getAssignmentsByDate = async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) {
+      return res.status(400).json({ success: false, message: 'Date is required' });
+    }
+    const selectedDate = new Date(date);
+    if (isNaN(selectedDate.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid date format' });
+    }
+    const startOfDay = getSLStartOfDay(selectedDate);
+    const endOfDay = getSLEndOfDay(selectedDate);
+    // Find all assignments for the date
+    const assignments = await PickupAssignment.find({
+      date: {
+        $gte: startOfDay,
+        $lt: endOfDay
+      }
+    }).populate('driver').lean();
+    // Gather all pickup IDs
+    const pickupIds = [];
+    assignments.forEach(a => {
+      (a.pickups || []).forEach(p => pickupIds.push(p.pickup));
+    });
+    // Fetch pickup documents
+    const pickupDocs = await Pickup.find({ _id: { $in: pickupIds } }).lean();
+    const pickupMap = {};
+    pickupDocs.forEach(p => { pickupMap[p._id.toString()] = p; });
+    // Format as performance array
+    const performance = assignments.map(a => ({
+      driverId: a.driver?._id,
+      name: a.driver ? `${a.driver.firstName} ${a.driver.lastName}` : '',
+      vehicleType: a.routeDetails?.vehicleType,
+      vehicleNumber: a.routeDetails?.vehiclePlateNumber,
+      totalWeight: a.routeDetails?.totalWeight || 0,
+      totalFuel: a.routeDetails?.totalFuelCost ? a.routeDetails.totalFuelCost / 400 : 0, // Dummy conversion
+      totalCost: a.routeDetails?.totalFuelCost || 0,
+      pickups: (a.pickups || []).map(p => {
+        const doc = pickupMap[p.pickup?.toString()] || {};
+        return {
+          pickupId: p.pickup,
+          address: doc.address || '',
+          estimatedAmount: doc.estimatedAmount || '',
+          distance: doc.optimizationDetails?.distance || 0,
+          fuel: doc.optimizationDetails?.fuel || 0,
+          cost: doc.optimizationDetails?.totalCost || 0
+        };
+      })
+    }));
+    res.status(200).json({ success: true, performance });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Get today's optimized route for a driver
+export const getDriverRouteForToday = async (req, res) => {
+  try {
+    const driverId = req.user?._id || req.user?.id || req.params.driverId;
+    if (!driverId) {
+      return res.status(400).json({ error: 'Driver ID is required' });
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    // Find today's assignment for this driver
+    const assignment = await PickupAssignment.findOne({
+      driver: driverId,
+      date: { $gte: today, $lt: tomorrow }
+    }).populate('pickups.pickup');
+    if (!assignment) {
+      return res.status(404).json({ error: 'No assignment found for today' });
+    }
+    // Ordered stops
+    const stops = assignment.pickups
+      .sort((a, b) => a.sequence - b.sequence)
+      .map(p => {
+        const doc = p.pickup;
+        return {
+          id: doc._id,
+          lat: doc.location.coordinates[1],
+          lng: doc.location.coordinates[0],
+          address: doc.address,
+          status: doc.status,
+          sequence: p.sequence
+        };
+      });
+    if (stops.length < 2) {
+      return res.status(200).json({ route: stops });
+    }
+    // Prepare origin, destination, waypoints
+    const origin = { lat: stops[0].lat, lng: stops[0].lng };
+    const destination = { lat: stops[stops.length - 1].lat, lng: stops[stops.length - 1].lng };
+    const waypoints = stops.slice(1, -1).map(s => `${s.lat},${s.lng}`);
+    // Debug logging
+    console.log('Stops:', stops);
+    console.log('Origin:', origin);
+    console.log('Destination:', destination);
+    console.log('Waypoints:', waypoints);
+    let routeResult;
+    try {
+      routeResult = await getOptimizedRoute(
+        `${origin.lat},${origin.lng}`,
+        `${destination.lat},${destination.lng}`,
+        waypoints
+      );
+      console.log('RouteResult:', routeResult);
+      if (!routeResult.overview_polyline || !routeResult.overview_polyline.points) {
+        console.error('No overview_polyline in routeResult:', routeResult);
+        return res.status(500).json({ error: 'No overview_polyline in route result' });
+      }
+      const points = polyline.decode(routeResult.overview_polyline.points).map(([lat, lng]) => ({ lat, lng }));
+      res.status(200).json({ route: points });
+    } catch (err) {
+      console.error('Polyline decode or route fetch error:', err, routeResult);
+      res.status(500).json({ error: 'Polyline decode or route fetch error: ' + err.message });
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

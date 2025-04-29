@@ -23,7 +23,7 @@ export const registerAdmin = async (req, res) => {
     });
 
     // Generate JWT token
-    const token = jwt.sign({ id: admin._id }, process.env.JWT_SECRET, {
+    const token = jwt.sign({ _id: admin._id }, process.env.JWT_SECRET, {
       expiresIn: '7d',
     });
 
@@ -56,16 +56,17 @@ export const loginAdmin = async (req, res) => {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    // Generate JWT token
-    const token = jwt.sign({ id: admin._id }, process.env.JWT_SECRET, {
-      expiresIn: '7d',
+    // Generate JWT token with shorter expiration (24 hours)
+    const token = jwt.sign({ _id: admin._id }, process.env.JWT_SECRET, {
+      expiresIn: '24h',
     });
 
-    // Send response
+    // Send response with additional security headers
     res.status(200).json({
       token,
       _id: admin._id,
       name: admin.name,
+      expiresIn: '24h'
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

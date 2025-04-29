@@ -15,6 +15,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import fuelPriceRoutes from './routes/fuelPriceRoutes.js';
 import routeRoutes from './routes/routeRoutes.js';
 import leaveRequestRoutes from './routes/leaveRequestRoutes.js';
+import vehicleRoutes from './routes/vehicleRoutes.js';
 
 // Config
 dotenv.config();
@@ -51,6 +52,7 @@ app.use('/api/admins', adminRoutes);
 app.use('/api/fuel-price', fuelPriceRoutes);
 app.use('/api/routes', routeRoutes);
 app.use('/api/leave-requests', leaveRequestRoutes);
+app.use('/api/vehicles', vehicleRoutes);
 
 
 const io = new Server(httpServer, {

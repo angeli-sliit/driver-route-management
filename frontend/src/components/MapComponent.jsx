@@ -56,8 +56,8 @@ const MapComponent = ({
       )}
 
       {/* Pickup Locations */}
-      {pickupLocations.map((loc, index) => (
-        <Marker key={index} position={[loc.lat, loc.lng]}>
+      {pickupLocations.map((loc) => (
+        <Marker key={loc.id} position={[loc.lat, loc.lng]}>
           <Popup>
             Pickup: {loc.item || 'Location'} <br />
             Address: {loc.text || loc.address || 'No address provided'}
@@ -85,10 +85,10 @@ const MapComponent = ({
         </Marker>
       )}
 
-      {/* Optimized Route */}
-      {optimizedRoute?.geometry?.coordinates && (
+      {/* Optimized Route as Polyline (array of lat/lng) */}
+      {Array.isArray(optimizedRoute) && optimizedRoute.length > 1 && (
         <Polyline
-          positions={optimizedRoute.geometry.coordinates.map(c => [c[1], c[0]])}
+          positions={optimizedRoute.map(p => [p.lat, p.lng])}
           color="blue"
         />
       )}

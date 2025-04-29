@@ -17,7 +17,22 @@ const pickupSchema = new mongoose.Schema({
   image: { type: String }, // Stores file path/URL
   weight: { type: Number ,min: [1, 'Weight must be at least 1kg'],max: [10000, 'Weight cannot exceed 10,000kg']}, // Actual collected weight
   amount: { type: Number, min: [0, 'Amount cannot be negative'] }, // Calculated payment amount
-  cancellationReason: { type: String } // For cancelled pickups
+  cancellationReason: { type: String }, // For cancelled pickups
+  // New fields for optimization details
+  optimizationDetails: {
+    totalPoints: { type: Number, default: 0 },
+    totalWeight: { type: Number, default: 0 },
+    totalFuelCost: { type: Number, default: 0 },
+    routeSequence: { type: Number, default: 0 },
+    estimatedArrivalTime: { type: Date },
+    distance: { type: Number, default: 0 }, // in kilometers
+    duration: { type: Number, default: 0 }, // in minutes
+    assignedAt: { type: Date },
+    fuel: { type: Number, default: 0 }, // per-pickup fuel
+    fuelCost: { type: Number, default: 0 }, // per-pickup fuel cost
+    metalCost: { type: Number, default: 0 }, // per-pickup metal cost
+    totalCost: { type: Number, default: 0 } // per-pickup total cost
+  }
 }, { timestamps: true });
 
 

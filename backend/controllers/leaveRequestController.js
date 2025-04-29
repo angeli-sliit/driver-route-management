@@ -4,7 +4,7 @@ import Driver from '../models/Driver.js';
 // Create a new leave request
 export const createLeaveRequest = async (req, res) => {
   try {
-    const { startDate, endDate, reason } = req.body;
+    const { startDate, endDate, reason, type } = req.body;
     const driverId = req.user._id; // Assuming user info is attached by auth middleware
 
     const leaveRequest = new LeaveRequest({
@@ -12,10 +12,13 @@ export const createLeaveRequest = async (req, res) => {
       startDate,
       endDate,
       reason,
+      type,
       status: 'Pending'
     });
 
     await leaveRequest.save();
+    // Populate driver before sending response
+    await leaveRequest.populate('driver', 'firstName lastName');
 
     res.status(201).json({
       success: true,
@@ -72,8 +75,11 @@ export const updateLeaveRequest = async (req, res) => {
     const { id } = req.params;
     const { status, adminResponse } = req.body;
 
+    console.log(`Updating leave request with ID: ${id}, Status: ${status}, Admin Response: ${adminResponse}`);
+
     const leaveRequest = await LeaveRequest.findById(id);
     if (!leaveRequest) {
+      console.log(`Leave request not found with ID: ${id}`);
       return res.status(404).json({
         success: false,
         message: 'Leave request not found'
@@ -90,6 +96,7 @@ export const updateLeaveRequest = async (req, res) => {
     if (status === 'Approved') {
       const driver = await Driver.findById(leaveRequest.driver);
       if (driver) {
+        console.log(`Updating driver availability for driver ID: ${driver._id}`);
         // Mark the driver as unavailable for the leave period
         const startDate = new Date(leaveRequest.startDate);
         const endDate = new Date(leaveRequest.endDate);
@@ -97,25 +104,54 @@ export const updateLeaveRequest = async (req, res) => {
         // Create an array of dates between start and end
         const dates = [];
         let currentDate = new Date(startDate);
+        
+        // Ensure we're working with date objects, not strings
         while (currentDate <= endDate) {
-          dates.push(new Date(currentDate));
+          // Create a new Date object for each date to avoid reference issues
+          const dateToAdd = new Date(currentDate);
+          dates.push(dateToAdd);
           currentDate.setDate(currentDate.getDate() + 1);
         }
         
-        // Mark attendance for each date
+        // Mark attendance for each date with error handling
+        const attendanceErrors = [];
         for (const date of dates) {
-          await driver.markAttendance(date, 'unavailable');
+          try {
+            await driver.markAttendance(date, 'unavailable');
+          } catch (err) {
+            console.error(`Error marking attendance for date ${date}:`, err);
+            attendanceErrors.push({
+              date: date.toISOString(),
+              error: err.message
+            });
+          }
         }
+        
+        // If there were any errors marking attendance, include them in the response
+        if (attendanceErrors.length > 0) {
+          console.warn('Some attendance markings failed:', attendanceErrors);
+          // You might want to handle these errors appropriately
+          // For now, we'll continue with the leave request update
+        }
+      } else {
+        console.log(`Driver not found for leave request ID: ${id}`);
+        return res.status(404).json({
+          success: false,
+          message: 'Driver not found for this leave request'
+        });
       }
     }
 
     await leaveRequest.save();
+    // Populate driver before sending response
+    await leaveRequest.populate('driver', 'firstName lastName');
 
     res.json({
       success: true,
       data: leaveRequest
     });
   } catch (error) {
+    console.error('Error updating leave request:', error);
     res.status(500).json({
       success: false,
       message: error.message

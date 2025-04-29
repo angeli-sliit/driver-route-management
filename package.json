@@ -24,6 +24,14 @@
   "homepage": "https://github.com/angeli-sliit/driver-route-management#readme",
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
-    "dotenv": "^16.4.7"
+    "@react-pdf/renderer": "^4.3.0",
+    "bootstrap": "^5.3.5",
+    "buffer": "^6.0.3",
+    "dotenv": "^16.4.7",
+    "jspdf": "^3.0.1",
+    "polyline": "^0.2.0",
+    "prop-types": "^15.8.1",
+    "react-bootstrap": "^2.10.9",
+    "react-csv": "^2.2.2"
   }
 }

@@ -2,6 +2,7 @@ import React from 'react';
 import { FaLinkedin, FaFacebook, FaTwitter, FaInstagram } from 'react-icons/fa';
 import { MdEmail } from 'react-icons/md';
 import logo from '../assets/logo.png';
+import { Link } from 'react-router-dom';
 
 const Footer = () => {
   const footerStyle = {
@@ -34,7 +35,7 @@ const Footer = () => {
             <ul className="list-unstyled">
               <li><a href="/about-us" className="text-white text-decoration-none">About Us</a></li>
               <li><a href="/privacy-policy" className="text-white text-decoration-none">Privacy Policy</a></li>
-              <li><a href="/terms-and-conditions" className="text-white text-decoration-none">Term & Condition</a></li>
+              <li><a href="/terms-and-conditions" className="text-white text-decoration-none">Terms and Conditions</a></li>
               <li><a href="/delivery-details" className="text-white text-decoration-none">Delivery Details</a></li>
               <li><a href="/return-policy" className="text-white text-decoration-none">Return Policy</a></li>
             </ul>

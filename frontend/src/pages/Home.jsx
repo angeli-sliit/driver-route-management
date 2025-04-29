@@ -11,7 +11,8 @@ import { API_BASE_URL } from '../config.js';
 
 const Home = () => {
   const navigate = useNavigate();
-  const driverName = localStorage.getItem('driverName');
+  const driverData = JSON.parse(localStorage.getItem('driverData') || '{}');
+  const driverName = driverData.name ? driverData.name.split(' ')[0] : 'Driver';
   const [showLeaveRequestForm, setShowLeaveRequestForm] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [leaveLoading, setLeaveLoading] = useState(true);
@@ -34,7 +35,7 @@ const Home = () => {
       });
       setLeaveRequests(response.data.data || []);
     } catch (error) {
-      // Optionally show error
+      toast.error(error.response?.data?.message || 'Failed to fetch leave requests');
     } finally {
       setLeaveLoading(false);
     }
@@ -61,7 +62,7 @@ const Home = () => {
       <Navbar />
       <div className="container flex-grow-1 py-5">
         <h1 className="text-center text-primary fw-bold mb-3" style={{ paddingTop: '80px' }}>
-          Welcome {driverName || 'John Doe'}!
+          Welcome {driverName}!
         </h1>
         
         <div className="d-flex justify-content-center gap-3 mt-4">
@@ -100,6 +101,7 @@ const Home = () => {
                 <tr>
                   <th>Start Date</th>
                   <th>End Date</th>
+                  <th>Type</th>
                   <th>Reason</th>
                   <th>Status</th>
                   <th>Admin Response</th>
@@ -112,6 +114,21 @@ const Home = () => {
                     <tr key={req._id}>
                       <td>{formatDate(req.startDate)}</td>
                       <td>{formatDate(req.endDate)}</td>
+                      <td>
+                        <Badge
+                          bg={
+                            req.type === 'EMERGENCY'
+                              ? 'danger'
+                              : req.type === 'SICK'
+                              ? 'warning'
+                              : req.type === 'VACATION'
+                              ? 'info'
+                              : 'secondary'
+                          }
+                        >
+                          {req.type}
+                        </Badge>
+                      </td>
                       <td>{req.reason}</td>
                       <td>
                         <Badge

@@ -1,32 +1,50 @@
 import React, { useState, useEffect } from 'react';
-import { Form, Button, Alert, InputGroup } from 'react-bootstrap';
+import { Form, Button, Alert, InputGroup, Spinner } from 'react-bootstrap';
 import axios from 'axios';
 import { API_BASE_URL } from '../config.js';
 import { toast } from 'react-toastify';
+import useFormValidation from '../hooks/useFormValidation';
+import { leaveRequestValidationRules } from '../utils/validation';
 
 const LeaveRequestForm = ({ show, onHide, onSuccess }) => {
-  const [formData, setFormData] = useState({
-    startDate: '',
-    endDate: '',
-    reason: ''
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [startSet, setStartSet] = useState(false);
   const [endSet, setEndSet] = useState(false);
   const [existingRequests, setExistingRequests] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const {
+    values,
+    errors,
+    touched,
+    isSubmitting,
+    setIsSubmitting,
+    handleChange,
+    handleBlur,
+    validateForm,
+    resetForm
+  } = useFormValidation(
+    {
+      startDate: '',
+      endDate: '',
+      reason: '',
+      type: ''
+    },
+    leaveRequestValidationRules
+  );
 
   useEffect(() => {
-    // Fetch existing leave requests for this driver
     const fetchExisting = async () => {
+      setIsLoading(true);
       try {
         const token = localStorage.getItem('token');
         const response = await axios.get(`${API_BASE_URL}/api/leave-requests/my-requests`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         setExistingRequests(response.data.data || []);
-      } catch (e) {
-        // ignore
+      } catch (error) {
+        toast.error('Failed to fetch existing leave requests');
+      } finally {
+        setIsLoading(false);
       }
     };
     fetchExisting();
@@ -34,44 +52,15 @@ const LeaveRequestForm = ({ show, onHide, onSuccess }) => {
 
   // Helper to check for overlap
   const isOverlapping = (start1, end1, start2, end2) => {
-    return (
-      (start1 <= end2 && end1 >= start2)
-    );
+    return (start1 <= end2 && end1 >= start2);
   };
 
-  const validateDates = () => {
-    const start = new Date(formData.startDate);
-    const end = new Date(formData.endDate);
-    const now = new Date();
+  const validateOverlap = () => {
+    if (!values.startDate || !values.endDate) return true;
     
-    // Check if start date is in the future
-    if (start < now) {
-      setError('Start date must be in the future');
-      return false;
-    }
+    const start = new Date(values.startDate);
+    const end = new Date(values.endDate);
     
-    // Check if request is made at least 24 hours before start date
-    const hoursDiff = (start - now) / (1000 * 60 * 60);
-    if (hoursDiff < 24) {
-      setError('Leave requests must be made at least 24 hours in advance');
-      return false;
-    }
-    
-    // Check if end date is after start date
-    if (end <= start) {
-      setError('End date must be after start date');
-      return false;
-    }
-    
-    // Check if leave duration is not more than 30 days
-    const diffTime = Math.abs(end - start);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    if (diffDays > 30) {
-      setError('Leave duration cannot exceed 30 days');
-      return false;
-    }
-    
-    // Check for overlapping requests
     const overlap = existingRequests.some(req => {
       if (['Approved', 'Pending'].includes(req.status)) {
         const reqStart = new Date(req.startDate);
@@ -80,53 +69,41 @@ const LeaveRequestForm = ({ show, onHide, onSuccess }) => {
       }
       return false;
     });
+
     if (overlap) {
-      setError('You already have a leave request that overlaps with these dates.');
+      toast.error('You already have a leave request that overlaps with these dates.');
       return false;
     }
-    
     return true;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    if (!validateDates()) {
-      setLoading(false);
+    
+    if (!validateForm() || !validateOverlap()) {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const token = localStorage.getItem('token');
       await axios.post(
         `${API_BASE_URL}/api/leave-requests`,
-        formData,
+        values,
         {
           headers: { Authorization: `Bearer ${token}` }
         }
       );
       toast.success('Leave request submitted successfully');
       onSuccess?.();
-      setFormData({ startDate: '', endDate: '', reason: '' });
+      resetForm();
+      onHide();
     } catch (error) {
       const errorMessage = error.response?.data?.message || 'Error submitting leave request';
-      setError(errorMessage);
       toast.error(errorMessage);
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
-  };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    // Clear error when user makes changes
-    setError('');
   };
 
   // Calculate minimum date (24 hours from now)
@@ -136,26 +113,37 @@ const LeaveRequestForm = ({ show, onHide, onSuccess }) => {
     return now.toISOString().slice(0, 10);
   };
 
+  if (isLoading) {
+    return (
+      <div className="text-center p-4">
+        <Spinner animation="border" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </Spinner>
+        <p className="mt-2">Loading leave request data...</p>
+      </div>
+    );
+  }
+
   return (
-    <Form onSubmit={handleSubmit}>
-      {error && <Alert variant="danger">{error}</Alert>}
+    <Form onSubmit={handleSubmit} noValidate>
       <Form.Group className="mb-3">
         <Form.Label>Start Date</Form.Label>
         <InputGroup>
           <Form.Control
             type="date"
             name="startDate"
-            value={formData.startDate}
+            value={values.startDate}
             onChange={handleChange}
-            required
+            onBlur={handleBlur}
             min={getMinDate()}
             disabled={startSet}
+            isInvalid={touched.startDate && errors.startDate}
           />
           {!startSet ? (
             <Button
               variant="outline-success"
-              onClick={() => setStartSet(!!formData.startDate)}
-              disabled={!formData.startDate}
+              onClick={() => setStartSet(!!values.startDate)}
+              disabled={!values.startDate}
               type="button"
             >
               Set
@@ -170,6 +158,11 @@ const LeaveRequestForm = ({ show, onHide, onSuccess }) => {
             </Button>
           )}
         </InputGroup>
+        {touched.startDate && errors.startDate && (
+          <Form.Control.Feedback type="invalid">
+            {errors.startDate}
+          </Form.Control.Feedback>
+        )}
         <Form.Text className="text-muted">
           Leave requests must be made at least 24 hours in advance
         </Form.Text>
@@ -181,17 +174,18 @@ const LeaveRequestForm = ({ show, onHide, onSuccess }) => {
           <Form.Control
             type="date"
             name="endDate"
-            value={formData.endDate}
+            value={values.endDate}
             onChange={handleChange}
-            required
-            min={formData.startDate || getMinDate()}
+            onBlur={handleBlur}
+            min={values.startDate || getMinDate()}
             disabled={endSet}
+            isInvalid={touched.endDate && errors.endDate}
           />
           {!endSet ? (
             <Button
               variant="outline-success"
-              onClick={() => setEndSet(!!formData.endDate)}
-              disabled={!formData.endDate}
+              onClick={() => setEndSet(!!values.endDate)}
+              disabled={!values.endDate}
               type="button"
             >
               Set
@@ -206,9 +200,41 @@ const LeaveRequestForm = ({ show, onHide, onSuccess }) => {
             </Button>
           )}
         </InputGroup>
+        {touched.endDate && errors.endDate && (
+          <Form.Control.Feedback type="invalid">
+            {errors.endDate}
+          </Form.Control.Feedback>
+        )}
         <Form.Text className="text-muted">
           Leave duration cannot exceed 30 days
         </Form.Text>
+      </Form.Group>
+
+      <Form.Group className="mb-3">
+        <Form.Label>Leave Type</Form.Label>
+        <Form.Select
+          name="type"
+          value={values.type}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          isInvalid={touched.type && errors.type}
+        >
+          <option value="">Select leave type</option>
+          <option value="SICK">Sick Leave</option>
+          <option value="VACATION">Vacation</option>
+          <option value="PERSONAL">Personal Leave</option>
+          <option value="EMERGENCY">Emergency Leave</option>
+        </Form.Select>
+        {touched.type && errors.type && (
+          <Form.Control.Feedback type="invalid">
+            {errors.type}
+          </Form.Control.Feedback>
+        )}
+        {values.type === 'EMERGENCY' && (
+          <Form.Text className="text-danger">
+            Emergency leave requests will be processed immediately. Please ensure this is a genuine emergency.
+          </Form.Text>
+        )}
       </Form.Group>
 
       <Form.Group className="mb-3">
@@ -217,12 +243,17 @@ const LeaveRequestForm = ({ show, onHide, onSuccess }) => {
           as="textarea"
           rows={3}
           name="reason"
-          value={formData.reason}
+          value={values.reason}
           onChange={handleChange}
-          required
+          onBlur={handleBlur}
           placeholder="Please provide a reason for your leave request"
-          minLength={10}
+          isInvalid={touched.reason && errors.reason}
         />
+        {touched.reason && errors.reason && (
+          <Form.Control.Feedback type="invalid">
+            {errors.reason}
+          </Form.Control.Feedback>
+        )}
       </Form.Group>
 
       <div className="d-flex justify-content-end gap-2">
@@ -232,9 +263,23 @@ const LeaveRequestForm = ({ show, onHide, onSuccess }) => {
         <Button 
           variant="primary" 
           type="submit" 
-          disabled={loading || !startSet || !endSet}
+          disabled={isSubmitting || !startSet || !endSet}
         >
-          {loading ? 'Submitting...' : 'Submit Request'}
+          {isSubmitting ? (
+            <>
+              <Spinner
+                as="span"
+                animation="border"
+                size="sm"
+                role="status"
+                aria-hidden="true"
+                className="me-2"
+              />
+              Submitting...
+            </>
+          ) : (
+            'Submit Request'
+          )}
         </Button>
       </div>
     </Form>

@@ -17,7 +17,11 @@ export const getOptimizedRoute = async (origin, destination, waypoints) => {
     });
     return response.data.routes[0];
   } catch (error) {
-    console.error('Error optimizing route:', error);
-    throw new Error('Failed to optimize route');
+    if (error.response) {
+      console.error('Google Directions API error:', error.response.data);
+    } else {
+      console.error('Error optimizing route:', error);
+    }
+    throw new Error('Failed to optimize route: ' + (error.response?.data?.error_message || error.message));
   }
 };

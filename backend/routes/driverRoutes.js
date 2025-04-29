@@ -27,27 +27,33 @@ const router = express.Router();
 // Public routes
 router.post('/login', loginDriver);
 router.post('/register', protectAdmin, registerDriver);
-router.put('/:id', protectAdmin, updateDriver);
+
+// Admin routes
 router.get('/', protectAdmin, getDrivers);
 
+// Driver routes
 router.get('/me', protectDriver, getCurrentDriver);
 router.put('/update-location', protectDriver, updateDriverLocation);
 router.post('/upload-profile-picture', protectDriver, upload.single('profilePicture'), uploadProfilePicture);
 
-router.get('/:id', protectDriver, getDriverById);
-router.delete('/:id', protectAdmin, deleteDriver);
-router.put('/:id/availability', protectAdmin, updateDriverAvailability);
-
-// Vehicle assignment routes
-router.post('/assign-vehicle', protectAdmin, assignVehicle);
-
 // Attendance routes
 router.post('/mark-attendance', protectAdmin, markAttendance);
 router.post('/bulk-mark-attendance', protectAdmin, bulkMarkAttendance);
+
+// Get driver availability - MUST be before /:id routes
 router.get('/availability', protectAdmin, getDriverAvailability);
 
 // Setup helper route
 router.post('/setup-for-date', protectAdmin, setupDriversForDate);
+
+// Vehicle assignment routes
+router.post('/assign-vehicle', protectAdmin, assignVehicle);
+
+// ID-based routes - MUST be after specific routes
+router.get('/:id', protectDriver, getDriverById);
+router.put('/:id', protectAdmin, updateDriver);
+router.delete('/:id', protectAdmin, deleteDriver);
+router.put('/:id/availability', protectAdmin, updateDriverAvailability);
 
 // Add attendance route
 router.post('/:id/attendance', protectAdmin, async (req, res) => {

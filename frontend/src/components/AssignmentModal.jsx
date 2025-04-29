@@ -1,11 +1,28 @@
 import React, { useState } from 'react';
-import { Modal, Button, Form } from 'react-bootstrap';
+import { Modal, Button, Form, Spinner } from 'react-bootstrap';
+import useFormValidation from '../hooks/useFormValidation';
 
-const AssignmentModal = ({ show, onHide, date, assignPickupsToDrivers }) => {
-    const [useEnhancedOptimization, setUseEnhancedOptimization] = useState(false);
+const AssignmentModal = ({ show, onHide, date, assignPickupsToDrivers, pendingPickupsCount, availableDriversCount, fuelPrice }) => {
+    const {
+        values,
+        handleChange,
+        isSubmitting,
+        setIsSubmitting
+    } = useFormValidation(
+        { useEnhancedOptimization: false },
+        {}
+    );
 
-    const handleAssign = () => {
-        assignPickupsToDrivers(useEnhancedOptimization);
+    const handleAssign = async () => {
+        setIsSubmitting(true);
+        try {
+            await assignPickupsToDrivers(values.useEnhancedOptimization);
+            onHide();
+        } catch (error) {
+            toast.error(error.message || 'Failed to assign pickups');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -17,10 +34,13 @@ const AssignmentModal = ({ show, onHide, date, assignPickupsToDrivers }) => {
                 </Modal.Title>
             </Modal.Header>
             <Modal.Body>
-                <p className="lead">
-                    Are you sure you want to optimize and assign pickups for <strong>{date || 'selected date'}</strong>?
-                </p>
-                <div className="alert alert-warning mt-3">
+                {/* Summary Section */}
+                <div className="mb-3 p-2 bg-light border rounded">
+                    <div><strong>Pending Pickups:</strong> {pendingPickupsCount}</div>
+                    <div><strong>Available Drivers:</strong> {availableDriversCount}</div>
+                    <div><strong>Fuel Price:</strong> LKR {fuelPrice || 'N/A'}</div>
+                </div>
+                <div className="alert alert-warning">
                     <i className="bi bi-info-circle-fill me-2"></i>
                     This action will automatically assign pickups based on:
                     <ul className="mt-2 mb-0">
@@ -29,22 +49,47 @@ const AssignmentModal = ({ show, onHide, date, assignPickupsToDrivers }) => {
                         <li>Optimal fuel efficiency</li>
                     </ul>
                 </div>
+                <p className="lead">
+                    Are you sure you want to optimize and assign pickups for <strong>{date || 'selected date'}</strong>?
+                </p>
                 <Form.Check
                     type="checkbox"
+                    id="useEnhancedOptimization"
+                    name="useEnhancedOptimization"
                     label="Use enhanced optimization (includes time windows and improved route planning)"
-                    checked={useEnhancedOptimization}
-                    onChange={(e) => setUseEnhancedOptimization(e.target.checked)}
+                    checked={values.useEnhancedOptimization}
+                    onChange={handleChange}
                     className="mt-3"
                 />
             </Modal.Body>
             <Modal.Footer>
-                <Button variant="secondary" onClick={onHide}>
+                <Button variant="secondary" onClick={onHide} disabled={isSubmitting}>
                     <i className="bi bi-x-circle me-2"></i>
                     Cancel
                 </Button>
-                <Button variant="primary" onClick={handleAssign}>
-                    <i className="bi bi-check2-circle me-2"></i>
-                    Confirm Assignment
+                <Button 
+                    variant="primary" 
+                    onClick={handleAssign}
+                    disabled={isSubmitting}
+                >
+                    {isSubmitting ? (
+                        <>
+                            <Spinner
+                                as="span"
+                                animation="border"
+                                size="sm"
+                                role="status"
+                                aria-hidden="true"
+                                className="me-2"
+                            />
+                            Assigning...
+                        </>
+                    ) : (
+                        <>
+                            <i className="bi bi-check2-circle me-2"></i>
+                            Confirm Assignment
+                        </>
+                    )}
                 </Button>
             </Modal.Footer>
         </Modal>
